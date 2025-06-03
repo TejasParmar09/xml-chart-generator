@@ -56,4 +56,7 @@ const api = {
   },
 };
 
+// Debug log to confirm the api object structure
+console.log('API object exported from apiClient:', api);
+
 export default api;

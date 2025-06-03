@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api/apiClient';
+import api from '../api/apiClient'; // Ensure this path is correct
 import { RiUserLine, RiLockPasswordLine, RiEyeLine, RiEyeOffLine, RiMailLine } from 'react-icons/ri';
 
-export default function RegisterPage() {
+// Debug log to confirm the imported api object
+console.log('Imported API object in RegisterPage:', api);
+
+export default function RegisterPage({ onRegisterSuccess }) {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -14,7 +17,7 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-  useState(() => {
+  useEffect(() => {
     setIsMounted(true);
   }, []);
 
@@ -27,11 +30,27 @@ export default function RegisterPage() {
       return;
     }
 
+    // Debug: Verify the api.auth object
+    console.log('API auth object in handleSubmit:', api.auth);
+    if (!api.auth || typeof api.auth.register !== 'function') {
+      setError('API client is not properly configured for registration. Please contact support.');
+      console.error('API client error: api.auth.register is not a function');
+      return;
+    }
+
     try {
-      await api.post('/auth/register', { name, email, password });
-      navigate('/login');
+      console.log('Registering user with data:', { name, email, password });
+      const res = await api.auth.register({ name, email, password }); // Use api.auth.register
+      console.log('Registration response:', res.data);
+      if (res.data && res.data.user) {
+        onRegisterSuccess(res.data.user);
+        navigate('/login');
+      } else {
+        navigate('/login');
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      console.error('Registration error:', err.response || err);
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
     }
   };
 

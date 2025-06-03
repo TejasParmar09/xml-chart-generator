@@ -100,7 +100,7 @@ export default function App() {
               isLoggedIn ? (
                 <Navigate to={user?.role === 'admin' ? '/admin' : '/user'} replace /> // FIX: Redirect to /user
               ) : (
-                <RegisterPage />
+                <RegisterPage onRegisterSuccess={handleLoginSuccess} />
               )
             }
           />
