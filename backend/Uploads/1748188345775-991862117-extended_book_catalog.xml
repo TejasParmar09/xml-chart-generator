@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog>
+  <book id="bk101">
+    <title>XML Developer's Guide</title>
+    <author>Gambardella, Matthew</author>
+    <genre>Computer</genre>
+    <price>44.95</price>
+  </book>
+  <book id="bk102">
+    <title>Midnight Rain</title>
+    <author>Ralls, Kim</author>
+    <genre>Fantasy</genre>
+    <price>5.95</price>
+  </book>
+  <book id="bk103">
+    <title>Maeve Ascendant</title>
+    <author>Corets, Eva</author>
+    <genre>Fantasy</genre>
+    <price>5.95</price>
+  </book>
+  <book id="bk104">
+    <title>Oberon's Legacy</title>
+    <author>Corets, Eva</author>
+    <genre>Fantasy</genre>
+    <price>5.95</price>
+  </book>
+</catalog>

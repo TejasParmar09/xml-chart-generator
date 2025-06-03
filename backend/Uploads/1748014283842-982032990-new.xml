@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<states>
+  <state name="Uttar Pradesh">
+    <men>115000000</men>
+    <women>110000000</women>
+    <children>40000000</children>
+    <other>100000</other>
+    <total>265100000</total>
+  </state>
+  <state name="Maharashtra">
+    <men>61000000</men>
+    <women>58000000</women>
+    <children>20000000</children>
+    <other>80000</other>
+    <total>139080000</total>
+  </state>
+  <state name="Bihar">
+    <men>60000000</men>
+    <women>58000000</women>
+    <children>22000000</children>
+    <other>70000</other>
+    <total>140070000</total>
+  </state>
+  <state name="West Bengal">
+    <men>46000000</men>
+    <women>45000000</women>
+    <children>15000000</children>
+    <other>60000</other>
+    <total>106060000</total>
+  </state>
+  <state name="Madhya Pradesh">
+    <men>40000000</men>
+    <women>39000000</women>
+    <children>14000000</children>
+    <other>50000</other>
+    <total>93050000</total>
+  </state>
+  <state name="Tamil Nadu">
+    <men>34000000</men>
+    <women>35000000</women>
+    <children>12000000</children>
+    <other>40000</other>
+    <total>81040000</total>
+  </state>
+  <state name="Rajasthan">
+    <men>38000000</men>
+    <women>37000000</women>
+    <children>13000000</children>
+    <other>40000</other>
+    <total>88040000</total>
+  </state>
+  <state name="Karnataka">
+    <men>34000000</men>
+    <women>33000000</women>
+    <children>11000000</children>
+    <other>30000</other>
+    <total>78030000</total>
+  </state>
+  <state name="Gujarat">
+    <men>35000000</men>
+    <women>34000000</women>
+    <children>12000000</children>
+    <other>30000</other>
+    <total>81030000</total>
+  </state>
+  <state name="Andhra Pradesh">
+    <men>26000000</men>
+    <women>25000000</women>
+    <children>9000000</children>
+    <other>20000</other>
+    <total>60020000</total>
+  </state>
+  <state name="Odisha">
+    <men>22000000</men>
+    <women>21000000</women>
+    <children>8000000</children>
+    <other>20000</other>
+    <total>51020000</total>
+  </state>
+  <state name="Telangana">
+    <men>19000000</men>
+    <women>18000000</women>
+    <children>7000000</children>
+    <other>15000</other>
+    <total>44015000</total>
+  </state>
+  <state name="Kerala">
+    <men>17000000</men>
+    <women>18000000</women>
+    <children>5000000</children>
+    <other>12000</other>
+    <total>40012000</total>
+  </state>
+  <state name="Punjab">
+    <men>15000000</men>
+    <women>14000000</women>
+    <children>4000000</children>
+    <other>10000</other>
+    <total>33010000</total>
+  </state>
+  <state name="Assam">
+    <men>16000000</men>
+    <women>15000000</women>
+    <children>5000000</children>
+    <other>11000</other>
+    <total>36011000</total>
+  </state>
+  <state name="Jharkhand">
+    <men>16000000</men>
+    <women>15000000</women>
+    <children>5000000</children>
+    <other>10000</other>
+    <total>36010000</total>
+  </state>
+  <state name="Chhattisgarh">
+    <men>14000000</men>
+    <women>13000000</women>
+    <children>4500000</children>
+    <other>9000</other>
+    <total>31509000</total>
+  </state>
+  <state name="Haryana">
+    <men>13000000</men>
+    <women>12000000</women>
+    <children>4000000</children>
+    <other>9000</other>
+    <total>29009000</total>
+  </state>
+  <state name="Delhi">
+    <men>10000000</men>
+    <women>9500000</women>
+    <children>3000000</children>
+    <other>8000</other>
+    <total>22508000</total>
+  </state>
+  <state name="Jammu and Kashmir">
+    <men>6500000</men>
+    <women>6300000</women>
+    <children>2000000</children>
+    <other>7000</other>
+    <total>14807000</total>
+  </state>
+</states>
