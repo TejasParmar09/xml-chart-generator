@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Select from 'react-select';
 import toast, { Toaster } from 'react-hot-toast';
 import ChartGenerator from './ChartGenerator';
@@ -16,6 +16,10 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
   const [showChart, setShowChart] = useState(false);
   const [isGeneratingChart, setIsGeneratingChart] = useState(false);
   const [isFetchingFiles, setIsFetchingFiles] = useState(false);
+  const [is3DMode, setIs3DMode] = useState(false); // New state for 3D mode
+
+  // Reference for the scrollable chart type container
+  const chartTypeContainerRef = useRef(null);
 
   useEffect(() => {
     console.log('Files state updated:', files);
@@ -59,7 +63,6 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
         console.error('Error fetching files:', error);
         if (error.response?.status === 401) {
           handleUnauthorized();
-          setFiles([]);
         } else if (error.response?.status === 404 && error.response?.data?.error === 'No files found') {
           setFiles([]);
         } else {
@@ -75,7 +78,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
 
   // Ensure selectedFile is reset on refresh
   useEffect(() => {
-    setSelectedFile(null); // Reset selection on mount
+    setSelectedFile(null);
   }, []);
 
   const handleFileUpload = async (file) => {
@@ -119,6 +122,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       setSelectedYAxes([]);
       setFieldOptions([]);
       setShowChart(false);
+      setIs3DMode(false); // Reset 3D mode on new file upload
 
       if (onFileUpload) {
         onFileUpload();
@@ -268,6 +272,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
         setSelectedFileData(null);
         setFieldOptions([]);
         setShowChart(false);
+        setIs3DMode(false);
         return;
       }
 
@@ -293,6 +298,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
         setSelectedYAxes([]);
         setSelectedChart('bar');
         setShowChart(false);
+        setIs3DMode(false);
         toast.warn(`No data found in file "${file.name}". Using fallback data.`);
         return;
       }
@@ -302,6 +308,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       setSelectedYAxes([]);
       setSelectedChart('bar');
       setShowChart(false);
+      setIs3DMode(false);
 
       toast.success(`File "${file.name}" loaded successfully!`);
     } catch (error) {
@@ -318,6 +325,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       setSelectedYAxes([]);
       setSelectedChart('bar');
       setShowChart(false);
+      setIs3DMode(false);
     }
   };
 
@@ -340,6 +348,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
         setSelectedYAxes([]);
         setFieldOptions([]);
         setShowChart(false);
+        setIs3DMode(false);
       }
       toast.success(`File "${file.name}" deleted successfully.`);
     } catch (error) {
@@ -374,6 +383,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       setSelectedYAxes([]);
       setFieldOptions([]);
       setShowChart(false);
+      setIs3DMode(false);
       toast.success('All files cleared successfully.');
     } catch (error) {
       console.error('Error clearing files:', error);
@@ -408,16 +418,19 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
   const handleXAxisSelect = (selectedOption) => {
     setSelectedXAxis(selectedOption);
     setShowChart(false);
+    setIs3DMode(false);
   };
 
   const handleYAxesSelect = (selectedOptions) => {
     setSelectedYAxes(selectedOptions || []);
     setShowChart(false);
+    setIs3DMode(false);
   };
 
   const handleChartTypeSelect = (type) => {
     setSelectedChart(type);
     setShowChart(false);
+    setIs3DMode(false);
   };
 
   const handleGenerateChart = () => {
@@ -437,15 +450,85 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       toast.error('Pie chart supports only one Y-axis. Please select exactly one Y-axis.');
       return;
     }
+    if (selectedChart === 'waterfall' && selectedYAxes.length > 1) {
+      toast.error('Waterfall chart supports only one Y-axis. Please select exactly one Y-axis.');
+      return;
+    }
+    if (selectedChart === 'radar' && !selectedXAxis) {
+      toast.error('Radar chart requires an X-axis for categories.');
+      return;
+    }
 
     setIsGeneratingChart(true);
     setShowChart(true);
+    setIs3DMode(false); // Reset 3D mode when generating a new chart
     setIsGeneratingChart(false);
+  };
+
+  const handleGenerate3DChart = () => {
+    if (!selectedChart) {
+      toast.error('Please select a chart type');
+      return;
+    }
+    if (!selectedXAxis) {
+      toast.error('Please select an X-axis');
+      return;
+    }
+    if (selectedYAxes.length === 0) {
+      toast.error('Please select at least one Y-axis');
+      return;
+    }
+    if (selectedChart === 'pie' || selectedChart === 'waterfall' || selectedChart === 'radar' || selectedChart === 'area') {
+      toast.error(`3D mode is not supported for ${selectedChart} charts.`);
+      return;
+    }
+
+    setIsGeneratingChart(true);
+    setShowChart(true);
+    setIs3DMode(true);
+    setIsGeneratingChart(false);
+  };
+
+  // Scroll functions for chart type selection
+  const scrollLeft = () => {
+    if (chartTypeContainerRef.current) {
+      chartTypeContainerRef.current.scrollBy({ left: -200, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRight = () => {
+    if (chartTypeContainerRef.current) {
+      chartTypeContainerRef.current.scrollBy({ left: 200, behavior: 'smooth' });
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <Toaster position="top-right" />
+      {/* Update Toaster to display messages only once and centered */}
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#333',
+            color: '#fff',
+            padding: '16px',
+            fontSize: '16px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.2)',
+          },
+          success: {
+            style: {
+              background: '#10B981',
+            },
+          },
+          error: {
+            style: {
+              background: '#EF4444',
+            },
+          },
+        }}
+      />
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 bg-gradient-to-r from-indigo-600 to-blue-500 rounded-2xl p-6 shadow-lg">
           <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">XML Chart Generator</h1>
@@ -574,133 +657,206 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
               <h2 className="text-2xl font-bold text-gray-900">Chart Configuration</h2>
               <p className="mt-1 text-sm text-gray-500">Configure visualization for {selectedFile.name}</p>
             </div>
-            <div className="p-6 space-y-8">
+            <div className="p-10 space-y-8">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                <h3 className="text-lg font-semibold text-gray-900 mb-8 flex items-center">
                   <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                   Select Chart Type
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-6">
-                  {['bar', 'line', 'pie', 'scatter', 'column3d'].map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => handleChartTypeSelect(type)}
-                      className={`relative p-6 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 group ${
-                        selectedChart === type
-                          ? 'border-indigo-600 bg-gradient-to-br from-indigo-50 to-blue-50 text-indigo-600 shadow-lg'
-                          : 'border-gray-200 hover:border-indigo-300 hover:shadow-lg bg-white'
-                      }`}
-                      disabled={isLoading || isFetchingFiles}
-                    >
-                      <div className="text-center space-y-3">
-                        <div className="w-12 h-12 mx-auto">
-                          {type === 'bar' && (
-                            <svg
-                              className={`w-full h-full transition-colors duration-200 ${
-                                selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
-                              }`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                              />
-                            </svg>
-                          )}
-                          {type === 'line' && (
-                            <svg
-                              className={`w-full h-full transition-colors duration-200 ${
-                                selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
-                              }`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
-                              />
-                            </svg>
-                          )}
-                          {type === 'pie' && (
-                            <svg
-                              className={`w-full h-full transition-colors duration-200 ${
-                                selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
-                              }`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"
-                              />
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"
-                              />
-                            </svg>
-                          )}
-                          {type === 'scatter' && (
-                            <svg
-                              className={`w-full h-full transition-colors duration-200 ${
-                                selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
-                              }`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M3 3h18v18H3V3zm4 4h.01M10 7h.01M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13h.01M10 13h.01M16 13h.01M7 16h.01M13 16h.01M16 16h.01"
-                              />
-                            </svg>
-                          )}
-                          {type === 'column3d' && (
-                            <svg
-                              className={`w-full h-full transition-colors duration-200 ${
-                                selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
-                              }`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M3 21h18M5 3h4v12H5zm6-2h4v14h-4zm6-4h4v16h-4z"
-                              />
-                            </svg>
-                          )}
+                <div className="relative">
+                  <button
+                    onClick={scrollLeft}
+                    className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:bg-indigo-700 z-10"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <div
+                    ref={chartTypeContainerRef}
+                    className="flex overflow-x-auto scrollbar-hide space-x-4 pb-8 pt-8 px-12"
+                    style={{ scrollBehavior: 'smooth' }}
+                  >
+                    {['bar', 'line', 'pie', 'scatter', 'waterfall', 'area', 'stackedbar', 'radar'].map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => handleChartTypeSelect(type)}
+                        className={`relative flex-shrink-0 p-6 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 group ${
+                          selectedChart === type
+                            ? 'border-indigo-600 bg-gradient-to-br from-indigo-50 to-blue-50 text-indigo-600 shadow-lg'
+                            : 'border-gray-200 hover:border-indigo-300 hover:shadow-lg bg-white'
+                        } w-40`}
+                        disabled={isLoading || isFetchingFiles}
+                      >
+                        <div className="text-center space-y-3">
+                          <div className="w-12 h-12 mx-auto">
+                            {type === 'bar' && (
+                              <svg
+                                className={`w-full h-full transition-colors duration-200 ${
+                                  selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                                />
+                              </svg>
+                            )}
+                            {type === 'line' && (
+                              <svg
+                                className={`w-full h-full transition-colors duration-200 ${
+                                  selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
+                                />
+                              </svg>
+                            )}
+                            {type === 'pie' && (
+                              <svg
+                                className={`w-full h-full transition-colors duration-200 ${
+                                  selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"
+                                />
+                              </svg>
+                            )}
+                            {type === 'scatter' && (
+                              <svg
+                                className={`w-full h-full transition-colors duration-200 ${
+                                  selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 3h18v18H3V3zm4 4h.01M10 7h.01M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13h.01M10 13h.01M16 13h.01M7 16h.01M13 16h.01M16 16h.01"
+                                />
+                              </svg>
+                            )}
+                            {type === 'waterfall' && (
+                              <svg
+                                className={`w-full h-full transition-colors duration-200 ${
+                                  selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 21h18M5 15h4v6H5zm6-6h4v12h-4zm6-12h4v18h-4z"
+                                />
+                              </svg>
+                            )}
+                            {type === 'area' && (
+                              <svg
+                                className={`w-full h-full transition-colors duration-200 ${
+                                  selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 21l5-5 4 4 5-5 4 4V3H3v18z"
+                                />
+                              </svg>
+                            )}
+                            {type === 'stackedbar' && (
+                              <svg
+                                className={`w-full h-full transition-colors duration-200 ${
+                                  selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M5 15h4v6H5zm0-6h4v4H5zm0-6h4v4H5zm6 12h4v6h-4zm0-6h4v4h-4zm0-6h4v4h-4z"
+                                />
+                              </svg>
+                            )}
+                            {type === 'radar' && (
+                              <svg
+                                className={`w-full h-full transition-colors duration-200 ${
+                                  selectedChart === type ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 16l-3-3m3 3l3-3m-3-3l-3-3m3 3l3-3"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                          <span className="text-lg font-medium capitalize block">
+                            {type === 'stackedbar' ? 'Stacked Bar' : type}
+                          </span>
                         </div>
-                        <span className="text-lg font-medium capitalize block">
-                          {type === 'bar' ? 'Bar' : type === 'column3d' ? '3D Column' : type}
-                        </span>
-                      </div>
-                      {selectedChart === type && (
-                        <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg">
-                          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  ))}
+                        {selectedChart === type && (
+                          <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg">
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={scrollRight}
+                    className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:bg-indigo-700 z-10"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8" style={{ position: 'relative' }}>
@@ -878,7 +1034,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                           ':hover': { color: '#4F46E5' },
                           padding: '8px',
                         }),
-                        indicatorSeparator: (base) => ({ ...base, backgroundColor: '#E5E7EB' }),
+                        indicatorSeparator: (base) => ({ ...base }),
                       }}
                       menuPortalTarget={document.body}
                       menuPosition="fixed"
@@ -891,14 +1047,14 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                   Please select both X and Y axes to generate the chart.
                 </p>
               )}
-              <div className="flex justify-center pt-8">
+              <div className="flex justify-center space-x-4 pt-8">
                 <button
                   onClick={handleGenerateChart}
                   disabled={!selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles}
                   className={`group relative px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 ${
-                    !selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles
+                    !selectedChart || !selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 text-white hover:from-indigo-700 hover:via-indigo-800 hover:to-indigo-900 shadow-lg hover:shadow-xl'
+                      : 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-600 hover:from-indigo-700 hover:via-blue-600 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl'
                   }`}
                 >
                   <span className="flex items-center">
@@ -939,6 +1095,53 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                     </div>
                   )}
                 </button>
+                <button
+                  onClick={handleGenerate3DChart}
+                  disabled={!selectedChart || !selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles}
+                  className={`group relative px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 ${
+                    !selectedChart || !selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-teal-600 via-teal-700 to-teal-600 hover:from-teal-700 hover:via-teal-600 hover:to-teal-800 text-white shadow-lg hover:shadow-xl'
+                  }`}
+                >
+                  <span className="flex items-center">
+                    {isGeneratingChart ? (
+                      <>
+                        <svg
+                          className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                        Generating 3D...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 8h16M4 12h16M4 16h16m-2-8v8m-4-8v8m-4-8v8"
+                          />
+                        </svg>
+                        Generate 3D Chart
+                      </>
+                    )}
+                  </span>
+                  {(!selectedXAxis || selectedYAxes.length === 0) && !isGeneratingChart && (
+                    <div className="absolute inset-0 rounded-xl bg-gray-900 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center text-sm">
+                      Please select both X and Y axes
+                    </div>
+                  )}
+                </button>
               </div>
               {showChart && (
                 <ChartGenerator
@@ -947,6 +1150,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                   selectedYAxes={selectedYAxes}
                   selectedFileData={selectedFileData}
                   isLoading={isLoading || isFetchingFiles}
+                  is3DMode={is3DMode} // Pass 3D mode state
                 />
               )}
             </div>

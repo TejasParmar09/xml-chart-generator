@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
@@ -9,9 +10,10 @@ import jsPDF from 'jspdf';
 // Register the datalabels plugin
 Chart.register(ChartDataLabels);
 
-const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedFileData, isLoading }) => {
+const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedFileData, isLoading, is3DMode }) => {
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
+  const chartContainerRef = useRef(null);
 
   // Helper function to get the last part of a field path (flattened name)
   const getFlattenedFieldName = (path) => {
@@ -20,20 +22,17 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
     return parts[parts.length - 1].toLowerCase();
   };
 
-  // Create gradient fill for datasets with fallback
-  const createGradient = (ctx, chartArea, colorStart, colorEnd) => {
-    if (!chartArea) {
-      return colorStart; // Fallback to solid color
-    }
-    // For 3D column or bar charts, gradient mimics lighting (top to bottom)
-    const gradient = ctx.createLinearGradient(0, chartArea.top || 0, 0, chartArea.bottom || 0);
+  // Create gradient fill for datasets
+  const createGradient = (ctx, area, colorStart, colorEnd) => {
+    if (!area) return colorStart;
+    const gradient = ctx.createLinearGradient(0, area.top || 0, 0, area.bottom || 0);
     gradient.addColorStop(0, colorStart);
     gradient.addColorStop(1, colorEnd);
     return gradient;
   };
 
   const prepareChartData = () => {
-    if (!selectedFileData || !selectedXAxis || selectedYAxes.length === 0) {
+    if (!selectedFileData || !selectedXAxis || !selectedYAxes || selectedYAxes.length === 0) {
       console.error('Missing required data:', { selectedFileData, selectedXAxis, selectedYAxes });
       toast.error('Missing required data to generate chart.');
       return null;
@@ -45,90 +44,182 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       const yFields = selectedYAxes.map((yAxis) => yAxis.value);
       const yFieldsFlattened = yFields.map(getFlattenedFieldName);
 
-      // Validate fields
       if (!xFieldFlattened || yFieldsFlattened.some((field) => !field)) {
         console.error('Invalid field names:', { xFieldFlattened, yFieldsFlattened });
         toast.error('Invalid field names selected.');
         return null;
       }
 
-      // Extract X-axis labels
       const labels = selectedFileData.map((item, index) => {
         const value = item[xFieldFlattened] ?? `Item ${index + 1}`;
         return value.toString();
       });
 
-      // Define vibrant color palette for gradients (for bar, column3d, line, scatter)
       const gradientColorPairs = [
-        { start: 'rgba(16, 185, 129, 0.8)', end: 'rgba(52, 211, 153, 0.4)' }, // Emerald
-        { start: 'rgba(220, 38, 38, 0.8)', end: 'rgba(251, 113, 133, 0.4)' },   // Red
-        { start: 'rgba(59, 130, 246, 0.8)', end: 'rgba(147, 197, 253, 0.4)' },  // Blue
-        { start: 'rgba(234, 179, 8, 0.8)', end: 'rgba(250, 204, 21, 0.4)' },   // Yellow
-        { start: 'rgba(139, 92, 246, 0.8)', end: 'rgba(196, 181, 253, 0.4)' }, // Purple
-        { start: 'rgba(234, 88, 12, 0.8)', end: 'rgba(251, 146, 60, 0.4)' },   // Orange
+        { start: 'rgba(16, 185, 129, 0.9)', end: 'rgba(52, 211, 153, 0.5)' }, // Emerald
+        { start: 'rgba(220, 60, 60, 0.9)', end: 'rgba(253, 113, 133, 0.5)' },   // Red
+        { start: 'rgba(59, 130, 246, 0.9)', end: 'rgba(147, 197, 253, 0.5)' },  // Blue
+        { start: 'rgba(234, 179, 8, 0.9)', end: 'rgba(250, 252, 21, 0.5)' },   // Yellow
+        { start: 'rgba(139, 75, 246, 0.9)', end: 'rgba(196, 181, 253, 0.5)' }, // Purple
+        { start: 'rgba(234, 88, 12, 0.9)', end: 'rgba(253, 146, 60, 0.5)' },   // Orange
       ];
 
-      // Define distinct solid colors for pie chart (one color per data point)
       const pieColors = [
-        '#10B981', // Emerald
-        '#EF4444', // Red
-        '#3B82F6', // Blue
-        '#EAB308', // Yellow
-        '#8B5CF6', // Purple
-        '#EA580C', // Orange
-        '#EC4899', // Pink
-        '#14B8A6', // Teal
-        '#F97316', // Orange-500
-        '#A855F7', // Purple-500
-        '#22C55E', // Green-500
-        '#0EA5E9', // Sky-500
+        '#10B981', '#EF4444', '#3B82F6', '#EAB308', '#8B5CF6', '#EA580C',
+        '#EC4899', '#14B8A6', '#F97316', '#A855F7', '#22C55E', '#0EA5E9',
       ];
 
-      // Extract Y-axis data
-      const datasets = yFields.map((yField, index) => {
-        const yFieldFlattened = yFieldsFlattened[index];
+      let datasets = [];
+
+      if (selectedChart === 'waterfall') {
+        const yFieldFlattened = yFieldsFlattened[0];
+        let cumulative = 0;
         const data = selectedFileData.map((item, itemIndex) => {
           let value = item[yFieldFlattened] ?? null;
           if (value == null || isNaN(value)) {
-            console.warn(`Invalid Y-axis value at item ${itemIndex} for field ${yField} (flattened: ${yFieldFlattened}):`, value);
-            return null;
+            console.warn(`Invalid Y value at item ${itemIndex} for field ${yFields[0]}:`, value);
+            return { base: cumulative, value: 0, cumulative };
           }
-          return Number(value);
+          value = Number(value);
+          const base = cumulative;
+          cumulative += value;
+          return { base, value, cumulative };
         });
 
-        if (selectedChart === 'pie') {
-          // For pie chart, assign a distinct color to each data point in the first dataset
-          const backgroundColors = data.map((_, dataIndex) => pieColors[dataIndex % pieColors.length]);
-          return {
-            label: selectedYAxes[index].label,
-            data,
-            backgroundColor: backgroundColors,
-            borderColor: backgroundColors.map(color => color.replace('0.8', '1')),
-            borderWidth: 1,
-          };
-        }
-
-        // For other chart types (bar, column3d, line, scatter)
-        const colorIndex = index % gradientColorPairs.length;
-        return {
-          label: selectedYAxes[index].label,
-          data,
+        datasets.push({
+          label: selectedYAxes[0].label,
+          data: data.map(d => d.value),
+          base: data.map(d => d.base),
           backgroundColor: (ctx) => {
             const chart = ctx.chart;
             const { ctx: canvasCtx, chartArea } = chart;
-            return createGradient(canvasCtx, chartArea, gradientColorPairs[colorIndex].start, gradientColorPairs[colorIndex].end);
+            const value = data[ctx.dataIndex].value;
+            return value >= 0
+              ? createGradient(canvasCtx, chartArea, 'rgba(16, 185, 129, 0.9)', 'rgba(52, 211, 153, 0.5)')
+              : createGradient(canvasCtx, chartArea, 'rgba(220, 60, 60, 0.9)', 'rgba(253, 113, 133, 0.5)');
           },
-          borderColor: gradientColorPairs[colorIndex].start.replace('0.8', '1'),
-          borderWidth: selectedChart === 'pie' ? 1 : 2,
-          fill: selectedChart === 'line' ? false : true,
-          tension: selectedChart === 'line' ? 0.4 : undefined,
-          pointRadius: selectedChart === 'scatter' ? 6 : 3,
-          pointHoverRadius: 8,
-          pointBackgroundColor: gradientColorPairs[colorIndex].start,
-        };
-      });
+          borderColor: (ctx) => (data[ctx.dataIndex].value >= 0 ? '#10B981' : '#EF4444'),
+          borderWidth: 1,
+          connectorLines: data, // Store for custom drawing
+        });
+      } else if (selectedChart === 'area') {
+        datasets = yFields.map((yField, index) => {
+          const yFieldFlattened = yFieldsFlattened[index];
+          const data = selectedFileData.map((item, itemIndex) => {
+            let value = item[yFieldFlattened] ?? null;
+            if (value == null || isNaN(value)) {
+              console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
+              return null;
+            }
+            return Number(value);
+          });
 
-      // Check for invalid data
+          const colorIndex = index % gradientColorPairs.length;
+          return {
+            label: selectedYAxes[index].label,
+            data,
+            backgroundColor: (ctx) => {
+              const chart = ctx.chart;
+              const { ctx: canvasCtx, chartArea } = chart;
+              return createGradient(canvasCtx, chartArea, gradientColorPairs[colorIndex].start, gradientColorPairs[colorIndex].end);
+            },
+            borderColor: gradientColorPairs[colorIndex].start.replace('0.9', '1'),
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+          };
+        });
+      } else if (selectedChart === 'stackedbar') {
+        datasets = yFields.map((yField, index) => {
+          const yFieldFlattened = yFieldsFlattened[index];
+          const data = selectedFileData.map((item, itemIndex) => {
+            let value = item[yFieldFlattened] ?? null;
+            if (value == null || isNaN(value)) {
+              console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
+              return null;
+            }
+            return Number(value);
+          });
+
+          const colorIndex = index % gradientColorPairs.length;
+          return {
+            label: selectedYAxes[index].label,
+            data,
+            backgroundColor: (ctx) => {
+              const chart = ctx.chart;
+              const { ctx: canvasCtx, chartArea } = chart;
+              return createGradient(canvasCtx, chartArea, gradientColorPairs[colorIndex].start, gradientColorPairs[colorIndex].end);
+            },
+            borderColor: gradientColorPairs[colorIndex].start.replace('0.9', '1'),
+            borderWidth: 2,
+            stack: 'Stack 0',
+          };
+        });
+      } else if (selectedChart === 'radar') {
+        datasets = yFields.map((yField, index) => {
+          const yFieldFlattened = yFieldsFlattened[index];
+          const data = selectedFileData.map((item, itemIndex) => {
+            let value = item[yFieldFlattened] ?? null;
+            if (value == null || isNaN(value)) {
+              console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
+              return null;
+            }
+            return Number(value);
+          });
+
+          const colorIndex = index % pieColors.length;
+          return {
+            label: selectedYAxes[index].label,
+            data,
+            backgroundColor: pieColors[colorIndex] + '80',
+            borderColor: pieColors[colorIndex],
+            borderWidth: 2,
+            fill: true,
+          };
+        });
+      } else {
+        datasets = yFields.map((yField, index) => {
+          const yFieldFlattened = yFieldsFlattened[index];
+          const data = selectedFileData.map((item, itemIndex) => {
+            let value = item[yFieldFlattened] ?? null;
+            if (value == null || isNaN(value)) {
+              console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
+              return null;
+            }
+            return Number(value);
+          });
+
+          if (selectedChart === 'pie') {
+            const backgroundColors = data.map((_, dataIndex) => pieColors[dataIndex % pieColors.length]);
+            return {
+              label: selectedYAxes[index].label,
+              data,
+              backgroundColor: backgroundColors,
+              borderColor: backgroundColors.map(color => color.replace('0.9', '1')),
+              borderWidth: 1,
+            };
+          }
+
+          const colorIndex = index % gradientColorPairs.length;
+          return {
+            label: selectedYAxes[index].label,
+            data,
+            backgroundColor: (ctx) => {
+              const chart = ctx.chart;
+              const { ctx: canvasCtx, chartArea } = chart;
+              return createGradient(canvasCtx, chartArea, gradientColorPairs[colorIndex].start, gradientColorPairs[colorIndex].end);
+            },
+            borderColor: gradientColorPairs[colorIndex].start.replace('0.9', '1'),
+            borderWidth: 2,
+            fill: selectedChart === 'line' ? false : true,
+            tension: selectedChart === 'line' ? 0.4 : undefined,
+            pointRadius: selectedChart === 'scatter' ? 6 : 3,
+            pointHoverRadius: 8,
+            pointBackgroundColor: gradientColorPairs[colorIndex].start,
+          };
+        });
+      }
+
       const hasValidData = datasets.some((dataset) => dataset.data.some((value) => value != null));
       if (!hasValidData) {
         console.warn('No valid data points found:', datasets);
@@ -136,7 +227,6 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
         return null;
       }
 
-      // Handle duplicate labels
       const labelCounts = {};
       const uniqueLabels = labels.map((label, index) => {
         if (labelCounts[label]) {
@@ -159,8 +249,8 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
   };
 
   const downloadJPG = () => {
-    if (!chartRef.current) return;
-    html2canvas(chartRef.current, { scale: 2 }).then((canvas) => {
+    if (!chartContainerRef.current) return;
+    html2canvas(chartContainerRef.current, { scale: 2 }).then((canvas) => {
       const link = document.createElement('a');
       link.download = 'chart.jpg';
       link.href = canvas.toDataURL('image/jpeg', 1.0);
@@ -173,8 +263,8 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
   };
 
   const downloadPDF = () => {
-    if (!chartRef.current) return;
-    html2canvas(chartRef.current, { scale: 2 }).then((canvas) => {
+    if (!chartContainerRef.current) return;
+    html2canvas(chartContainerRef.current, { scale: 2 }).then((canvas) => {
       const imgData = canvas.toDataURL('image/jpeg', 1.0);
       const pdf = new jsPDF('p', 'mm', 'a4');
       const imgWidth = 190;
@@ -205,7 +295,6 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       return;
     }
 
-    // Destroy existing chart instance if it exists
     if (chartInstanceRef.current) {
       try {
         chartInstanceRef.current.destroy();
@@ -216,8 +305,10 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       }
     }
 
-    const is3DColumn = selectedChart === 'column3d';
-    const chartType = is3DColumn ? 'bar' : selectedChart; // Use 'bar' for column3d
+    let chartType = selectedChart;
+    if (selectedChart === 'waterfall') chartType = 'bar';
+    if (selectedChart === 'area') chartType = 'line';
+    if (selectedChart === 'stackedbar') chartType = 'bar';
 
     const config = {
       type: chartType,
@@ -236,25 +327,25 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
             display: selectedChart !== 'pie',
             position: 'top',
             labels: {
-              font: { size: 14, weight: 'bold', family: "'Inter', sans-serif" },
+              font: { size: 16, weight: 'bold', family: "'Inter', sans-serif" },
               color: '#1F2937',
-              padding: 20,
-              boxWidth: 20,
+              padding: 30,
+              boxWidth: 25,
             },
           },
           title: {
             display: true,
-            text: `${selectedChart === 'column3d' ? '3D Column' : selectedChart.charAt(0).toUpperCase() + selectedChart.slice(1)} Chart`,
-            font: { size: 20, weight: 'bold', family: "'Inter', sans-serif" },
+            text: `${selectedChart.charAt(0).toUpperCase() + selectedChart.slice(1)} Chart`,
+            font: { size: 24, weight: 'bold', family: "'Inter', sans-serif" },
             color: '#1F2937',
-            padding: { top: 10, bottom: 20 },
+            padding: { top: 20, bottom: 30 },
           },
           tooltip: {
             enabled: true,
             backgroundColor: 'rgba(0, 0, 0, 0.85)',
-            titleFont: { size: 14, weight: 'bold', family: "'Inter', sans-serif" },
-            bodyFont: { size: 12, family: "'Inter', sans-serif" },
-            padding: 12,
+            titleFont: { size: 16, weight: 'bold', family: "'Inter', sans-serif" },
+            bodyFont: { size: 14, family: "'Inter', sans-serif" },
+            padding: 15,
             cornerRadius: 8,
             callbacks: {
               label: (context) => {
@@ -265,59 +356,87 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
             },
           },
           datalabels: {
-            display: selectedChart !== 'pie',
+            display: selectedChart !== 'pie' && selectedChart !== 'radar',
             color: '#1F2937',
-            font: { size: 12, weight: 'bold', family: "'Inter', sans-serif" },
-            formatter: (value) => (value != null ? formatNumber(value) : ''),
-            padding: 6,
+            font: { size: 14, weight: 'bold', family: "'Inter', sans-serif" },
+            formatter: (value, ctx) => {
+              if (selectedChart === 'waterfall') {
+                const data = ctx.dataset.connectorLines[ctx.dataIndex];
+                return formatNumber(data.cumulative);
+              }
+              return value != null ? formatNumber(value) : '';
+            },
+            padding: 8,
             backgroundColor: 'rgba(255, 255, 255, 0.7)',
             borderRadius: 4,
             borderWidth: 1,
             borderColor: 'rgba(0, 0, 0, 0.1)',
             anchor: 'end',
             align: 'top',
-            offset: 4,
+            offset: 6,
           },
         },
-        scales: selectedChart === 'pie' ? {} : {
-          x: {
-            title: {
-              display: true,
-              text: selectedXAxis.label,
-              font: { size: 14, weight: 'bold', family: "'Inter', sans-serif" },
-              color: '#1F2937',
-              padding: { top: 10 },
-            },
-            grid: { display: false },
-            ticks: {
-              color: '#1F2937',
-              font: { size: 10, family: "'Inter', sans-serif" },
-              maxRotation: 45,
-              minRotation: 45,
-              padding: 10,
-            },
-          },
-          y: {
-            title: {
-              display: true,
-              text: selectedYAxes.length === 1 ? selectedYAxes[0].label : 'Values',
-              font: { size: 14, weight: 'bold', family: "'Inter', sans-serif" },
-              color: '#1F2937',
-              padding: { bottom: 10 },
-            },
-            grid: { color: 'rgba(0, 0, 0, 0.05)', borderDash: [5, 5] },
-            ticks: {
-              color: '#1F2937',
-              font: { size: 12, family: "'Inter', sans-serif" },
-              callback: (value) => formatNumber(value),
-            },
-            beginAtZero: true,
-          },
-        },
+        scales:
+          selectedChart === 'pie' || selectedChart === 'radar'
+            ? selectedChart === 'radar'
+              ? {
+                  r: {
+                    angleLines: { display: true },
+                    grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                    ticks: {
+                      beginAtZero: true,
+                      font: { size: 14, family: "'Inter', sans-serif" },
+                      color: '#1F2937',
+                      callback: (value) => formatNumber(value),
+                    },
+                    pointLabels: {
+                      font: { size: 14, family: "'Inter', sans-serif" },
+                      color: '#1F2937',
+                    },
+                  },
+                }
+              : {}
+            : {
+                x: {
+                  title: {
+                    display: true,
+                    text: selectedXAxis.label,
+                    font: { size: 16, weight: 'bold', family: "'Inter', sans-serif" },
+                    color: '#1F2937',
+                    padding: { top: 15, bottom: 10 },
+                  },
+                  grid: { display: false },
+                  ticks: {
+                    color: '#1F2937',
+                    font: { size: 14, family: "'Inter', sans-serif" },
+                    maxRotation: 45,
+                    minRotation: 45,
+                    padding: 15,
+                  },
+                  stacked: selectedChart === 'stackedbar',
+                },
+                y: {
+                  title: {
+                    display: true,
+                    text: selectedYAxes.length === 1 ? selectedYAxes[0].label : 'Values',
+                    font: { size: 16, weight: 'bold', family: "'Inter', sans-serif" },
+                    color: '#1F2937',
+                    padding: { bottom: 15, top: 10 },
+                  },
+                  grid: { color: 'rgba(0, 0, 0, 0.05)', borderDash: [5, 5] },
+                  ticks: {
+                    color: '#1F2937',
+                    font: { size: 14, family: "'Inter', sans-serif" },
+                    callback: (value) => formatNumber(value),
+                  },
+                  beginAtZero: true,
+                  stacked: selectedChart === 'stackedbar',
+                },
+              },
         elements: {
           point: {
-            radius: selectedChart === 'scatter' ? 6 : 3,
-            hoverRadius: 8,
+            radius: selectedChart === 'scatter' ? 8 : 4,
+            hoverRadius: 10,
             hoverBorderWidth: 2,
           },
           line: {
@@ -325,22 +444,18 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
             tension: 0.4,
           },
           bar: {
-            borderWidth: 1,
-            borderRadius: 4,
-            barPercentage: 0.8,
-            categoryPercentage: 0.6,
-            // Simulate 3D effect for column3d
-            inflateAmount: is3DColumn ? 2 : 0, // Slight inflation for depth
-            // Custom 3D styling via backgroundColor gradient already applied
+            borderWidth: selectedChart === 'stackedbar' ? 2 : 1,
+            borderRadius: selectedChart === 'stackedbar' ? 4 : 6,
+            barPercentage: selectedChart === 'stackedbar' ? 0.7 : 0.8,
+            categoryPercentage: selectedChart === 'stackedbar' ? 0.5 : 0.6,
           },
         },
         layout: {
-          padding: 20,
+          padding: 40,
         },
       },
     };
 
-    // Helper function to format large numbers (e.g., 115000000 to "115M")
     const formatNumber = (value) => {
       if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
       if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -353,9 +468,9 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
         display: true,
         position: 'right',
         labels: {
-          font: { size: 14, weight: 'bold', family: "'Inter', sans-serif" },
+          font: { size: 16, weight: 'bold', family: "'Inter', sans-serif" },
           color: '#1F2937',
-          padding: 20,
+          padding: 30,
           generateLabels: (chart) => {
             const data = chart.data;
             return data.labels.map((label, i) => ({
@@ -372,14 +487,14 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       config.options.plugins.datalabels = {
         display: true,
         color: '#fff',
-        font: { size: 12, weight: 'bold', family: "'Inter', sans-serif" },
+        font: { size: 14, weight: 'bold', family: "'Inter', sans-serif" },
         formatter: (value, ctx) => {
           const total = ctx.dataset.data.reduce((sum, val) => sum + (val || 0), 0);
           const percentage = ((value / total) * 100).toFixed(1);
           return value != null ? `${percentage}%` : '';
         },
         textAlign: 'center',
-        padding: 4,
+        padding: 6,
       };
       config.options.plugins.tooltip.callbacks = {
         label: (context) => {
@@ -392,8 +507,56 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       };
     }
 
-    // Add 3D effect for column3d chart using Chart.js plugin
-    if (is3DColumn) {
+    if (selectedChart === 'waterfall') {
+      config.options.scales.y.stacked = false;
+      config.plugins = config.plugins || [];
+      config.plugins.push({
+        id: 'waterfallConnectors',
+        afterDatasetsDraw: (chart) => {
+          const ctx = chart.ctx;
+          const dataset = chart.data.datasets[0];
+          const meta = chart.getDatasetMeta(0);
+          const data = dataset.connectorLines;
+
+          meta.data.forEach((bar, index) => {
+            if (index === 0) return; // Skip connector for the first bar
+
+            const prevBar = meta.data[index - 1];
+            const currentBar = bar;
+
+            const prevX = prevBar.x + prevBar.width / 2;
+            const prevY = prevBar.y;
+            const currentX = currentBar.x - currentBar.width / 2;
+            const currentY = currentBar.y + (data[index].value < 0 ? currentBar.height : 0);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.moveTo(prevX, prevY);
+            ctx.lineTo(currentX, currentY);
+            ctx.stroke();
+            ctx.restore();
+          });
+        },
+      });
+    }
+
+    if (selectedChart === 'area') {
+      config.data.datasets.forEach(dataset => {
+        dataset.fill = true;
+      });
+    }
+
+    if (selectedChart === 'stackedbar') {
+      config.options.scales.x.stacked = true;
+      config.options.scales.y.stacked = true;
+      config.options.elements.bar.borderWidth = 2;
+      config.options.elements.bar.borderColor = '#FFFFFF'; // White border for separation
+    }
+
+    if ((selectedChart === 'bar' || selectedChart === 'stackedbar') && is3DMode) {
       config.plugins = config.plugins || [];
       config.plugins.push({
         id: 'custom3D',
@@ -403,11 +566,10 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
             const meta = chart.getDatasetMeta(datasetIndex);
             meta.data.forEach((bar, index) => {
               const { x, y, width, height } = bar;
-              // Simulate 3D shadow
               ctx.save();
               ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
               ctx.beginPath();
-              ctx.rect(x, y + height, width, 5); // Bottom shadow
+              ctx.rect(x, y + height, width, 5);
               ctx.fill();
               ctx.restore();
             });
@@ -445,36 +607,36 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
         }
       }
     };
-  }, [selectedChart, selectedXAxis, selectedYAxes, selectedFileData, isLoading]);
+  }, [selectedChart, selectedXAxis, selectedYAxes, selectedFileData, isLoading, is3DMode]);
 
   return (
-    <div className="mt-8 bg-white rounded-xl shadow-xl border border-gray-100 p-6 relative">
-      <h3 className="text-xl font-semibold text-gray-900 mb-4">Chart Preview</h3>
-      <div className="absolute top-6 right-6 flex space-x-2">
+    <div className="mt-12 bg-white rounded-2xl shadow-2xl border border-gray-100 p-8 relative text-lg">
+      <h3 className="text-2xl font-semibold text-gray-900 mb-6">Chart Preview</h3>
+      <div className="absolute top-8 right-8 flex space-x-4">
         <button
           onClick={downloadJPG}
-          className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 font-medium shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
           </svg>
-          JPG
+          Download JPG
         </button>
         <button
           onClick={downloadPDF}
-          className="flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors duration-200 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          className="flex items-center px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors duration-200 font-medium shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500"
         >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
           </svg>
-          PDF
+          Download PDF
         </button>
       </div>
-      <div className="relative" style={{ height: '600px' }}>
+      <div ref={chartContainerRef} className="relative" style={{ height: '700px', padding: '20px' }}>
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <svg
-              className="animate-spin h-10 w-10 text-indigo-600"
+              className="animate-spin h-12 w-12 text-indigo-600"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -488,11 +650,30 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
             </svg>
           </div>
         ) : (
-          <canvas ref={chartRef} className="w-full h-full" />
+          <div
+            className={`w-full h-full transition-all duration-500 ${is3DMode && (selectedChart === 'bar' || selectedChart === 'stackedbar') ? 'transform rotate-x-15 rotate-y-15 shadow-3d' : ''}`}
+          >
+            <canvas ref={chartRef} className="w-full h-full" />
+          </div>
         )}
       </div>
     </div>
   );
 };
+
+// Add custom styles for 3D effect
+const style = document.createElement('style');
+style.innerHTML = `
+  .rotate-x-15 {
+    transform: rotateX(15deg);
+  }
+  .rotate-y-15 {
+    transform: rotateY(15deg);
+  }
+  .shadow-3d {
+    box-shadow: 10px 10px 20px rgba(0, 0, 0, 0.3), -10px -10px 20px rgba(255, 255, 255, 0.5);
+  }
+`;
+document.head.appendChild(style);
 
 export default ChartGenerator;
