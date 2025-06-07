@@ -173,6 +173,30 @@ const AdminPanel = ({ user, onLogout }) => {
     }
   }, [navigate, onLogout, showErrorToast]);
 
+  const handleDeleteUser = useCallback(async (userId) => {
+    try {
+      console.log('Deleting user:', userId);
+      await api.admin.users.delete(userId);
+      toast.success('User deleted successfully');
+      // Refresh the user list after deletion
+      fetchAdminData();
+    } catch (err) {
+      const errorDetails = {
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+      };
+      console.error('Error deleting user:', errorDetails);
+      const errorMessage = err.response?.data?.message || 'Failed to delete user';
+      if (err.response?.status === 401) {
+        toast.error(errorMessage);
+        navigate('/login', { replace: true });
+      } else {
+        toast.error(errorMessage);
+      }
+    }
+  }, [fetchAdminData, navigate, onLogout, showErrorToast]);
+
   const fetchUserFiles = useCallback(
     async (userId) => {
       if (!userId) {
@@ -192,6 +216,7 @@ const AdminPanel = ({ user, onLogout }) => {
           uploadDate: file.uploadDate || file.createdAt,
           size: file.size,
           type: file.type || 'xml',
+          gridfsId: file.gridfsId, // Include gridfsId for navigation
         }));
         setAdminData((prev) => ({
           ...prev,
@@ -351,6 +376,7 @@ const AdminPanel = ({ user, onLogout }) => {
       </div>
 
       <div className="flex-1 p-8">
+        <Toaster position="top-right" />
         <Routes>
           <Route path="dashboard" element={<Dashboard stats={adminData.stats} loading={adminData.loading} />} />
           <Route
@@ -361,6 +387,7 @@ const AdminPanel = ({ user, onLogout }) => {
                 onSelectUser={fetchUserFiles}
                 selectedUser={adminData.selectedUser}
                 loading={adminData.loading}
+                onDeleteUser={handleDeleteUser}
               />
             }
           />
@@ -376,6 +403,10 @@ const AdminPanel = ({ user, onLogout }) => {
             }
           />
           <Route
+            path="files/:userId"
+            element={<UserFilesRoute fetchUserFiles={fetchUserFiles} />}
+          />
+          <Route
             path="profile"
             element={<ProfileManagement profile={profile} onUpdate={fetchProfile} />}
           />
@@ -387,12 +418,28 @@ const AdminPanel = ({ user, onLogout }) => {
   );
 };
 
+// New component to handle /admin/files/:userId route
+const UserFilesRoute = ({ fetchUserFiles }) => {
+  const { userId } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (userId) {
+      fetchUserFiles(userId);
+    } else {
+      navigate('/admin/users', { replace: true });
+    }
+  }, [userId, fetchUserFiles, navigate]);
+
+  return null; // This component only triggers fetchUserFiles and redirects
+};
+
 const Dashboard = ({ stats, loading }) => {
   const statCards = [
     { label: 'Total Users', value: stats.totalUsers || 0, icon: <RiGroupLine /> },
     { label: 'Total Files', value: stats.totalFiles || 0, icon: <RiFileLine /> },
-    { label: 'Admin Users', value: stats.adminUsers || 0, icon: <RiUserLine /> },
-    { label: 'Regular Users', value: stats.regularUsers || 0, icon: <RiUserLine /> },
+    { label: 'Admin Users', value: stats.adminUsersCount || 0, icon: <RiUserLine /> },
+    { label: 'Regular Users', value: stats.regularUsersCount || 0, icon: <RiUserLine /> },
   ];
 
   return (
@@ -418,7 +465,7 @@ const Dashboard = ({ stats, loading }) => {
   );
 };
 
-const UserManagement = ({ users, onSelectUser, selectedUser, loading }) => {
+const UserManagement = ({ users, onSelectUser, selectedUser, loading, onDeleteUser }) => {
   return (
     <div className="bg-white rounded-xl shadow-lg p-6">
       <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b border-gray-200 pb-4">User Management</h2>
@@ -442,16 +489,21 @@ const UserManagement = ({ users, onSelectUser, selectedUser, loading }) => {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => onSelectUser(user._id)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 shadow-sm ${
-                    selectedUser === user._id ?
-                      'bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2' :
-                      'bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2'
-                  }`}
-                >
-                  View Files
-                </button>
+                <div className="flex space-x-3">
+                  <Link
+                    to={`/admin/files/${user._id}`}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-all duration-200 shadow-sm font-medium"
+                    onClick={() => onSelectUser(user._id)}
+                  >
+                    View Files
+                  </Link>
+                  <button
+                    onClick={() => onDeleteUser(user._id)}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-all duration-200 shadow-sm font-medium"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))
           ) : (
@@ -514,6 +566,7 @@ const FileManagement = ({ files, loading, onFileDeleteSuccess, selectedUser }) =
                 <div className="flex space-x-3">
                   <Link
                     to={`/admin/files/${file.id}`}
+                    state={{ gridfsId: file.gridfsId }} // Pass gridfsId in state
                     className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-all duration-200 shadow-sm font-medium"
                   >
                     View
@@ -717,6 +770,9 @@ const FileDetailsPage = () => {
         ]);
         console.log('File details response:', fileRes.data);
         console.log('File content response:', contentRes.data);
+        if (!fileRes.data) {
+          throw new Error('No file data returned from server.');
+        }
         setFile({
           id: fileRes.data._id || fileRes.data.id,
           filename: fileRes.data.filename || 'Untitled File',
@@ -724,7 +780,7 @@ const FileDetailsPage = () => {
           size: fileRes.data.size,
           type: fileRes.data.type || 'xml',
         });
-        setContent(contentRes.data.data);
+        setContent(contentRes.data.data || 'No content available.');
       } catch (err) {
         const errorDetails = {
           status: err.response?.status,
@@ -738,12 +794,10 @@ const FileDetailsPage = () => {
         };
         console.error('Error fetching file details/content:', errorDetails);
         const errorMessage = err.response?.data?.message || `Failed to load file details for ID ${id}.`;
+        setError(errorMessage);
+        toast.error(errorMessage);
         if (err.response?.status === 401) {
-          toast.error(errorMessage);
           navigate('/login', { replace: true });
-        } else {
-          setError(errorMessage);
-          toast.error(errorMessage);
         }
       } finally {
         setLoading(false);
@@ -762,52 +816,54 @@ const FileDetailsPage = () => {
 
   if (error || !file) {
     return (
-      <div className="bg-white rounded-xl shadow-2xl px-8 pb-8 pt-6">
+      <div className="bg-white rounded-xl shadow-2xl px-8 pb-8 pt-6 max-w-4xl mx-auto">
         <h2 className="text-3xl font-bold text-indigo-800 mb-6 border-b-2 border-indigo-200 pb-2">File Details</h2>
         <button
           onClick={() => navigate(-1)}
           className="mb-6 px-6 py-2 bg-gray-200 text-gray-700 rounded-full font-semibold hover:bg-gray-300 transition-all duration-200 shadow"
         >
-          &larr; Back to User Files
+          ← Back to User Files
         </button>
-        <p className="text-center text-gray-500 py-8">{error || 'File not found'}</p>
+        <p className="text-center text-red-600 text-lg font-semibold py-8">{error || 'File not found'}</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-2xl px-8 pb-8 pt-6">
-      <h2 className="text-3xl font-bold text-indigo-800 mb-6 border-b-2 border-indigo-200 pb-2">File Details</h2>
-      <button
-        onClick={() => navigate(-1)}
-        className="mb-6 px-6 py-2 bg-gray-200 text-gray-700 rounded-full font-semibold hover:bg-gray-300 transition-all duration-200 shadow"
-      >
-        &larr; Back to User Files
-      </button>
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border-b pb-4">
-            <p className="text-sm font-medium text-gray-700">Filename</p>
-            <p className="mt-1 text-gray-900 text-lg font-semibold">{file.filename}</p>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl px-8 pb-8 pt-6">
+        <h2 className="text-3xl font-bold text-indigo-800 mb-6 border-b-2 border-indigo-200 pb-2">File Details</h2>
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-6 px-6 py-2 bg-gray-200 text-gray-700 rounded-full font-semibold hover:bg-gray-300 transition-all duration-200 shadow"
+        >
+          ← Back to User Files
+        </button>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border-b pb-4">
+              <p className="text-sm font-medium text-gray-700">Filename</p>
+              <p className="mt-1 text-gray-900 text-lg font-semibold">{file.filename}</p>
+            </div>
+            <div className="border-b pb-4">
+              <p className="text-sm font-medium text-gray-700">Upload Date</p>
+              <p className="mt-1 text-gray-900">{new Date(file.uploadDate).toLocaleString()}</p>
+            </div>
+            <div className="border-b pb-4">
+              <p className="text-sm font-medium text-gray-700">File Size</p>
+              <p className="mt-1 text-gray-900">{file.size ? `${(file.size / 1024).toFixed(2)} KB` : 'Unknown'}</p>
+            </div>
+            <div className="border-b pb-4">
+              <p className="text-sm font-medium text-gray-700">File Type</p>
+              <p className="mt-1 text-gray-900">{file.type}</p>
+            </div>
           </div>
-          <div className="border-b pb-4">
-            <p className="text-sm font-medium text-gray-700">Upload Date</p>
-            <p className="mt-1 text-gray-900">{new Date(file.uploadDate).toLocaleString()}</p>
+          <div>
+            <p className="text-lg font-bold text-indigo-800 mb-3 border-b-2 border-indigo-200 pb-2">Content</p>
+            <pre className="mt-1 bg-gray-100 p-4 rounded-xl overflow-auto max-h-96 whitespace-pre-wrap break-words text-sm leading-relaxed shadow-inner">
+              {content}
+            </pre>
           </div>
-          <div className="border-b pb-4">
-            <p className="text-sm font-medium text-gray-700">File Size</p>
-            <p className="mt-1 text-gray-900">{file.size ? `${(file.size / 1024).toFixed(2)} KB` : 'Unknown'}</p>
-          </div>
-          <div className="border-b pb-4">
-            <p className="text-sm font-medium text-gray-700">File Type</p>
-            <p className="mt-1 text-gray-900">{file.type}</p>
-          </div>
-        </div>
-        <div>
-          <p className="text-lg font-bold text-indigo-800 mb-3 border-b-2 border-indigo-200 pb-2">Content</p>
-          <pre className="mt-1 bg-gray-100 p-4 rounded-xl overflow-auto max-h-96 whitespace-pre-wrap break-words text-sm leading-relaxed shadow-inner">
-            {content}
-          </pre>
         </div>
       </div>
     </div>

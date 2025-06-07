@@ -16,9 +16,8 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
   const [showChart, setShowChart] = useState(false);
   const [isGeneratingChart, setIsGeneratingChart] = useState(false);
   const [isFetchingFiles, setIsFetchingFiles] = useState(false);
-  const [is3DMode, setIs3DMode] = useState(false); // New state for 3D mode
+  const [is3DMode, setIs3DMode] = useState(false);
 
-  // Reference for the scrollable chart type container
   const chartTypeContainerRef = useRef(null);
 
   useEffect(() => {
@@ -58,7 +57,11 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
         setSelectedFile(null);
         setSelectedFileData(null);
         setFieldOptions([]);
+        setSelectedXAxis(null);
+        setSelectedYAxes([]);
+        setSelectedChart('bar');
         setShowChart(false);
+        setIs3DMode(false);
       } catch (error) {
         console.error('Error fetching files:', error);
         if (error.response?.status === 401) {
@@ -76,7 +79,6 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
     fetchFiles();
   }, []);
 
-  // Ensure selectedFile is reset on refresh
   useEffect(() => {
     setSelectedFile(null);
   }, []);
@@ -122,7 +124,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       setSelectedYAxes([]);
       setFieldOptions([]);
       setShowChart(false);
-      setIs3DMode(false); // Reset 3D mode on new file upload
+      setIs3DMode(false);
 
       if (onFileUpload) {
         onFileUpload();
@@ -343,7 +345,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       if (selectedFile && selectedFile.gridfsId === file.gridfsId) {
         setSelectedFile(null);
         setSelectedFileData(null);
-        setSelectedChart('');
+        setSelectedChart(null);
         setSelectedXAxis(null);
         setSelectedYAxes([]);
         setFieldOptions([]);
@@ -417,20 +419,14 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
 
   const handleXAxisSelect = (selectedOption) => {
     setSelectedXAxis(selectedOption);
-    setShowChart(false);
-    setIs3DMode(false);
   };
 
   const handleYAxesSelect = (selectedOptions) => {
     setSelectedYAxes(selectedOptions || []);
-    setShowChart(false);
-    setIs3DMode(false);
   };
 
   const handleChartTypeSelect = (type) => {
     setSelectedChart(type);
-    setShowChart(false);
-    setIs3DMode(false);
   };
 
   const handleGenerateChart = () => {
@@ -461,7 +457,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
 
     setIsGeneratingChart(true);
     setShowChart(true);
-    setIs3DMode(false); // Reset 3D mode when generating a new chart
+    setIs3DMode(false);
     setIsGeneratingChart(false);
   };
 
@@ -489,7 +485,6 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
     setIsGeneratingChart(false);
   };
 
-  // Scroll functions for chart type selection
   const scrollLeft = () => {
     if (chartTypeContainerRef.current) {
       chartTypeContainerRef.current.scrollBy({ left: -200, behavior: 'smooth' });
@@ -504,7 +499,6 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      {/* Update Toaster to display messages only once and centered */}
       <Toaster
         position="top-center"
         toastOptions={{
@@ -582,13 +576,6 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
             <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-bold text-gray-900">Uploaded Files</h2>
-                <button
-                  onClick={handleClearFiles}
-                  className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 rounded-lg hover:bg-red-50 transition-colors duration-200"
-                  disabled={isLoading || isFetchingFiles || files.length === 0}
-                >
-                  Clear All
-                </button>
               </div>
             </div>
             <div className="divide-y divide-gray-200">
@@ -629,16 +616,6 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                         disabled={isLoading || isFetchingFiles || !file.gridfsId}
                       >
                         {selectedFile?.id === file.id ? 'Selected' : 'Select'}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteFile(file);
-                        }}
-                        className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 rounded-lg hover:bg-red-50 transition-colors duration-200"
-                        disabled={isLoading || isFetchingFiles}
-                      >
-                        Delete
                       </button>
                     </div>
                   </div>
@@ -762,7 +739,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   strokeWidth={2}
-                                  d="M3 3h18v18H3V3zm4 4h.01M10 7h.01M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13h.01M10 13h.01M16 13h.01M7 16h.01M13 16h.01M16 16h.01"
+                                  d="M3 3h18M3 21h18M6 6h.01M9 9h.01M12 12h.01M15 15h.01M18 18h.01M6 18h.01M18 6h.01"
                                 />
                               </svg>
                             )}
@@ -779,7 +756,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   strokeWidth={2}
-                                  d="M3 21h18M5 15h4v6H5zm6-6h4v12h-4zm6-12h4v18h-4z"
+                                  d="M3 12h4v8H3zm6-4h4v12H9zm6-8h4v20h-4z"
                                 />
                               </svg>
                             )}
@@ -796,7 +773,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   strokeWidth={2}
-                                  d="M3 21l5-5 4 4 5-5 4 4V3H3v18z"
+                                  d="M7 12l3-3 3 3 4-4M3 21h18V5H3v16z"
                                 />
                               </svg>
                             )}
@@ -813,7 +790,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   strokeWidth={2}
-                                  d="M5 15h4v6H5zm0-6h4v4H5zm0-6h4v4H5zm6 12h4v6h-4zm0-6h4v4h-4zm0-6h4v4h-4z"
+                                  d="M9 19v-4H5v4h4zm0-6v-4H5v4h4zm0-6V3H5v4h4zm6 12v-8h-4v8h4zm0-10v-4h-4v4h4zm0-6V3h-4v4h4z"
                                 />
                               </svg>
                             )}
@@ -830,22 +807,19 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   strokeWidth={2}
-                                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 16l-3-3m3 3l3-3m-3-3l-3-3m3 3l3-3"
+                                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 16c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-8l2 2 2-2-2-2-2 2z"
                                 />
                               </svg>
                             )}
                           </div>
-                          <span className="text-lg font-medium capitalize block">
-                            {type === 'stackedbar' ? 'Stacked Bar' : type}
-                          </span>
+                          <p
+                            className={`text-sm font-medium transition-colors duration-200 ${
+                              selectedChart === type ? 'text-indigo-600' : 'text-gray-600 group-hover:text-indigo-500'
+                            }`}
+                          >
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </p>
                         </div>
-                        {selectedChart === type && (
-                          <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg">
-                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </div>
-                        )}
                       </button>
                     ))}
                   </div>
@@ -859,27 +833,20 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8" style={{ position: 'relative' }}>
-                <div className="space-y-3" style={{ position: 'relative', zIndex: 50 }}>
-                  <label className="block text-sm font-semibold text-gray-700 flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-                    </svg>
-                    X-Axis
-                  </label>
-                  <div className="relative">
-                    {fieldOptions.length === 0 && (
-                      <p className="text-red-500 text-sm">No fields available for X-axis. Check the data structure.</p>
-                    )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">X-Axis</label>
                     <Select
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
+                    classNamePrefix="react-select"
+                    options={fieldOptions}
                       value={selectedXAxis}
                       onChange={handleXAxisSelect}
-                      options={fieldOptions}
-                      isSearchable
                       placeholder="Select X-Axis"
-                      isDisabled={isLoading || isFetchingFiles || fieldOptions.length === 0}
-                      className="react-select-container"
-                      classNamePrefix="react-select"
+                    className="text-sm"
+                    isDisabled={isLoading || isFetchingFiles}
+                    getOptionValue={(option) => option.value}
                       styles={{
                         menu: (provided) => ({
                           ...provided,
@@ -945,32 +912,22 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                         }),
                         indicatorSeparator: (base) => ({ ...base, backgroundColor: '#E5E7EB' }),
                       }}
-                      menuPortalTarget={document.body}
-                      menuPosition="fixed"
                     />
                   </div>
-                </div>
-                <div className="space-y-3" style={{ position: 'relative', zIndex: 40 }}>
-                  <label className="block text-sm font-semibold text-gray-700 flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                    </svg>
-                    Y-Axis
-                  </label>
-                  <div className="relative">
-                    {fieldOptions.length === 0 && (
-                      <p className="text-red-500 text-sm">No fields available for Y-axis. Check the data structure.</p>
-                    )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Y-Axis (Values)</label>
                     <Select
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
+                    classNamePrefix="react-select"
+                    isMulti
+                    options={fieldOptions}
                       value={selectedYAxes}
                       onChange={handleYAxesSelect}
-                      options={fieldOptions}
-                      isMulti
-                      isSearchable
-                      placeholder="Select Y-Axis"
-                      isDisabled={isLoading || isFetchingFiles || fieldOptions.length === 0}
-                      className="react-select-container"
-                      classNamePrefix="react-select"
+                    placeholder="Select Y-Axis Values"
+                    className="text-sm"
+                    isDisabled={isLoading || isFetchingFiles}
+                    getOptionValue={(option) => option.value}
                       styles={{
                         menu: (provided) => ({
                           ...provided,
@@ -1034,127 +991,43 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                           ':hover': { color: '#4F46E5' },
                           padding: '8px',
                         }),
-                        indicatorSeparator: (base) => ({ ...base }),
+                      indicatorSeparator: (base) => ({ ...base, backgroundColor: '#E5E7EB' }),
                       }}
-                      menuPortalTarget={document.body}
-                      menuPosition="fixed"
                     />
                   </div>
                 </div>
-              </div>
-              {(!selectedXAxis || selectedYAxes.length === 0) && (
-                <p className="text-sm text-gray-500 text-center mb-4">
-                  Please select both X and Y axes to generate the chart.
-                </p>
-              )}
-              <div className="flex justify-center space-x-4 pt-8">
+              <div className="flex justify-center space-x-4">
                 <button
                   onClick={handleGenerateChart}
-                  disabled={!selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles}
-                  className={`group relative px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 ${
-                    !selectedChart || !selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-600 hover:from-indigo-700 hover:via-blue-600 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl'
+                  className={`px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition duration-150 ease-in-out shadow-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
+                    isGeneratingChart ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
+                  disabled={isGeneratingChart || isLoading || isFetchingFiles}
                 >
-                  <span className="flex items-center">
-                    {isGeneratingChart ? (
-                      <>
-                        <svg
-                          className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
-                        </svg>
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-                          />
-                        </svg>
-                        Generate Chart
-                      </>
-                    )}
-                  </span>
-                  {(!selectedXAxis || selectedYAxes.length === 0) && !isGeneratingChart && (
-                    <div className="absolute inset-0 rounded-xl bg-gray-900 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center text-sm">
-                      Please select both X and Y axes
-                    </div>
-                  )}
+                  {isGeneratingChart ? 'Generating...' : 'Generate Chart'}
                 </button>
                 <button
                   onClick={handleGenerate3DChart}
-                  disabled={!selectedChart || !selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles}
-                  className={`group relative px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 ${
-                    !selectedChart || !selectedXAxis || selectedYAxes.length === 0 || isGeneratingChart || isLoading || isFetchingFiles
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-teal-600 via-teal-700 to-teal-600 hover:from-teal-700 hover:via-teal-600 hover:to-teal-800 text-white shadow-lg hover:shadow-xl'
+                  className={`px-6 py-3 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition duration-150 ease-in-out shadow-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 ${
+                    isGeneratingChart ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
+                  disabled={isGeneratingChart || isLoading || isFetchingFiles}
                 >
-                  <span className="flex items-center">
-                    {isGeneratingChart ? (
-                      <>
-                        <svg
-                          className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
-                        </svg>
-                        Generating 3D...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 8h16M4 12h16M4 16h16m-2-8v8m-4-8v8m-4-8v8"
-                          />
-                        </svg>
-                        Generate 3D Chart
-                      </>
-                    )}
-                  </span>
-                  {(!selectedXAxis || selectedYAxes.length === 0) && !isGeneratingChart && (
-                    <div className="absolute inset-0 rounded-xl bg-gray-900 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center text-sm">
-                      Please select both X and Y axes
-                    </div>
-                  )}
+                  {isGeneratingChart ? 'Generating...' : 'Generate 3D Chart'}
                 </button>
               </div>
-              {showChart && (
+            </div>
+          </div>
+        )}
+        {showChart && selectedFileData && (
                 <ChartGenerator
                   selectedChart={selectedChart}
                   selectedXAxis={selectedXAxis}
                   selectedYAxes={selectedYAxes}
                   selectedFileData={selectedFileData}
                   isLoading={isLoading || isFetchingFiles}
-                  is3DMode={is3DMode} // Pass 3D mode state
+            is3DMode={is3DMode}
                 />
-              )}
-            </div>
-          </div>
         )}
       </div>
     </div>

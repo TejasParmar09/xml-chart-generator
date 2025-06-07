@@ -24,6 +24,7 @@ const api = {
   admin: {
     users: {
       getAll: () => apiClient.get('/admin/users'),
+      delete: (userId) => apiClient.delete(`/admin/users/${userId}`),
     },
     dashboard: {
       getStats: () => apiClient.get('/admin/dashboard/stats'),
