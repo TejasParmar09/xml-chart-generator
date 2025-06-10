@@ -47,7 +47,14 @@ const api = {
   userFiles: {
     upload: (formData) =>
       apiClient.post('/files/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json'
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          console.log('Upload progress:', percentCompleted);
+        }
       }),
     getAll: () => apiClient.get('/files'),
     getDetails: (fileId) => apiClient.get(`/files/${fileId}`),

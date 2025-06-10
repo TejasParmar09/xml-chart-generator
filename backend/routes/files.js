@@ -13,99 +13,141 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'text/xml' || file.originalname.toLowerCase().endsWith('.xml')) {
+    console.log('File being processed:', {
+      originalname: file.originalname,
+      mimetype: file.mimetype
+    });
+    
+    const allowedMimeTypes = [
+      'text/xml',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ];
+    const allowedExtensions = ['.xml', '.xlsx', '.xls'];
+    const fileExtension = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf('.'));
+    
+    if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(fileExtension)) {
+      console.log('File accepted:', file.originalname);
       cb(null, true);
     } else {
-      cb(new Error('Only XML files are allowed'), false);
+      console.log('File rejected:', file.originalname, 'MimeType:', file.mimetype, 'Extension:', fileExtension);
+      cb(new Error('Only XML and Excel files (.xml, .xlsx, .xls) are allowed'), false);
     }
   },
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+// Error handling middleware for multer
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    console.error('Multer error:', err);
+    return res.status(400).json({ error: err.message });
+  } else if (err) {
+    console.error('File upload error:', err);
+    return res.status(400).json({ error: err.message });
+  }
+  next();
+};
+
 // File upload route
-router.post('/upload', authMiddleware.auth, upload.single('file'), async (req, res) => {
-  console.log('POST /api/files/upload route hit');
-  try {
-    if (!req.file) {
-      console.warn('No file uploaded');
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-    console.log('File received:', {
-      name: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-      bufferLength: req.file.buffer?.length
+router.post('/upload', 
+  authMiddleware.auth,
+  (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+      if (err) {
+        console.error('Multer error in upload route:', err);
+        return res.status(400).json({ error: err.message });
+      }
+      next();
     });
-
-    if (!global.bucket) {
-      console.error('GridFSBucket not initialized');
-      return res.status(500).json({ error: 'Server not configured for file uploads' });
-    }
-
-    // Upload to GridFS
-    let gridfsId;
+  },
+  async (req, res) => {
+    console.log('POST /api/files/upload route hit');
     try {
-      gridfsId = await new Promise((resolve, reject) => {
-        const uploadStream = global.bucket.openUploadStream(req.file.originalname);
-        console.log(`Upload stream opened with ID: ${uploadStream.id}`);
-        if (!(uploadStream.id instanceof mongoose.Types.ObjectId)) {
-          return reject(new Error(`Invalid gridfsId type: ${typeof uploadStream.id}`));
-        }
-        const id = uploadStream.id;
-        uploadStream.write(req.file.buffer);
-        uploadStream.end();
-        uploadStream.on('finish', () => {
-          console.log(`GridFS upload completed: ${id}`);
-          resolve(id);
-        });
-        uploadStream.on('error', err => {
-          console.error('GridFS upload error:', err);
-          reject(err);
-        });
+      if (!req.file) {
+        console.warn('No file uploaded');
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      console.log('File received:', {
+        name: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        bufferLength: req.file.buffer?.length
       });
 
-      // Verify GridFS file exists
-      const gridfsFile = await mongoose.connection.db.collection('uploads.files').findOne({ _id: gridfsId });
-      if (!gridfsFile) {
-        console.error(`GridFS file not found for ID: ${gridfsId}`);
+      if (!global.bucket) {
+        console.error('GridFSBucket not initialized');
+        return res.status(500).json({ error: 'Server not configured for file uploads' });
+      }
+
+      // Upload to GridFS
+      let gridfsId;
+      try {
+        gridfsId = await new Promise((resolve, reject) => {
+          const uploadStream = global.bucket.openUploadStream(req.file.originalname, {
+            contentType: req.file.mimetype
+          });
+          console.log(`Upload stream opened with ID: ${uploadStream.id}`);
+          if (!(uploadStream.id instanceof mongoose.Types.ObjectId)) {
+            return reject(new Error(`Invalid gridfsId type: ${typeof uploadStream.id}`));
+          }
+          const id = uploadStream.id;
+          uploadStream.write(req.file.buffer);
+          uploadStream.end();
+          uploadStream.on('finish', () => {
+            console.log(`GridFS upload completed: ${id}`);
+            resolve(id);
+          });
+          uploadStream.on('error', err => {
+            console.error('GridFS upload error:', err);
+            reject(err);
+          });
+        });
+
+        // Verify GridFS file exists
+        const gridfsFile = await mongoose.connection.db.collection('uploads.files').findOne({ _id: gridfsId });
+        if (!gridfsFile) {
+          console.error(`GridFS file not found for ID: ${gridfsId}`);
+          await global.bucket.delete(gridfsId).catch(err => console.error('Cleanup error:', err));
+          return res.status(500).json({ error: 'Failed to verify GridFS file' });
+        }
+      } catch (err) {
+        console.error('Failed to upload to GridFS:', err);
+        return res.status(500).json({ error: 'Failed to upload file to storage' });
+      }
+
+      // Save to database
+      try {
+        const savedFile = await fileController.saveFileToDb({
+          filename: req.file.originalname,
+          gridfsId,
+          size: req.file.size,
+          contentType: req.file.mimetype,
+          uploadedBy: req.user._id
+        });
+        console.log('File saved to DB:', savedFile);
+        res.status(201).json({
+          file: {
+            id: savedFile._id.toString(),
+            name: savedFile.filename,
+            size: savedFile.size,
+            uploadDate: savedFile.uploadDate,
+            gridfsId: savedFile.gridfsId.toString()
+          },
+          message: 'File uploaded successfully'
+        });
+      } catch (dbErr) {
+        console.error('Error saving file to DB:', dbErr);
         await global.bucket.delete(gridfsId).catch(err => console.error('Cleanup error:', err));
-        return res.status(500).json({ error: 'Failed to verify GridFS file' });
+        return res.status(500).json({ error: 'Failed to save file metadata' });
       }
     } catch (err) {
-      console.error('Failed to upload to GridFS:', err);
-      return res.status(500).json({ error: 'Failed to upload file to storage' });
+      console.error('Unexpected error in upload:', err);
+      res.status(500).json({ error: 'Failed to upload file' });
     }
-
-    // Save to database
-    try {
-      const savedFile = await fileController.saveFileToDb({
-        filename: req.file.originalname,
-        gridfsId,
-        size: req.file.size,
-        contentType: req.file.mimetype,
-        uploadedBy: req.user._id
-      });
-      console.log('File saved to DB:', savedFile);
-      res.status(201).json({
-        file: {
-          id: savedFile._id.toString(),
-          name: savedFile.filename,
-          size: savedFile.size,
-          uploadDate: savedFile.uploadDate,
-          gridfsId: savedFile.gridfsId.toString()
-        },
-        message: 'File uploaded successfully'
-      });
-    } catch (dbErr) {
-      console.error('Error saving file to DB:', dbErr);
-      await global.bucket.delete(gridfsId).catch(err => console.error('Cleanup error:', err));
-      return res.status(500).json({ error: 'Failed to save file metadata' });
-    }
-  } catch (err) {
-    console.error('Unexpected error in upload:', err);
-    res.status(500).json({ error: 'Failed to upload file' });
   }
-});
+);
 
 // Get all files for the authenticated user
 router.get('/', authMiddleware.auth, async (req, res) => {
@@ -166,7 +208,7 @@ router.get('/:id', authMiddleware.auth, async (req, res) => {
   }
 });
 
-// Get file content (parsed XML) using GridFS by gridfsId
+// Get file content using GridFS by gridfsId
 router.get('/content/:gridfsId', authMiddleware.auth, async (req, res) => {
   const { gridfsId } = req.params;
   console.log(`GET /api/files/content/:gridfsId route hit with gridfsId: ${gridfsId}`);
@@ -179,15 +221,36 @@ router.get('/content/:gridfsId', authMiddleware.auth, async (req, res) => {
     }
 
     const downloadStream = global.bucket.openDownloadStream(file.gridfsId);
-    let fileData = '';
-    downloadStream.on('data', chunk => fileData += chunk.toString('utf8'));
+    let chunks = [];
+    
+    downloadStream.on('data', chunk => chunks.push(chunk));
     downloadStream.on('end', async () => {
       try {
-        const parsedData = await xml2js.parseStringPromise(fileData);
-        res.json({ data: parsedData });
+        const buffer = Buffer.concat(chunks);
+        
+        if (file.contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+            file.filename.toLowerCase().endsWith('.xlsx') ||
+            file.contentType === 'application/vnd.ms-excel' ||
+            file.filename.toLowerCase().endsWith('.xls')) {
+          // For Excel files, send the buffer as base64
+          const base64Data = buffer.toString('base64');
+          res.json({ 
+            data: base64Data,
+            fileType: 'excel',
+            filename: file.filename
+          });
+        } else {
+          // For XML files, parse as before
+          const fileData = buffer.toString('utf8');
+          const parsedData = await xml2js.parseStringPromise(fileData);
+          res.json({ 
+            data: parsedData,
+            fileType: 'xml'
+          });
+        }
       } catch (parseErr) {
-        console.error('Error parsing XML:', parseErr);
-        res.status(500).json({ message: 'Failed to parse XML content' });
+        console.error('Error processing file:', parseErr);
+        res.status(500).json({ message: 'Failed to process file content' });
       }
     });
     downloadStream.on('error', err => {

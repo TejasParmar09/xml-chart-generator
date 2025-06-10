@@ -3,6 +3,7 @@ import Select from 'react-select';
 import toast, { Toaster } from 'react-hot-toast';
 import ChartGenerator from './ChartGenerator';
 import api from '../api/apiClient';
+import * as XLSX from 'xlsx';
 
 const FileUploadSection = ({ onFileUpload, isLoading }) => {
   const [files, setFiles] = useState([]);
@@ -89,8 +90,9 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       return;
     }
 
-    if (!file.name.toLowerCase().endsWith('.xml')) {
-      toast.error('Please upload a valid XML file.');
+    const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+    if (!['.xml', '.xlsx', '.xls'].includes(fileExtension)) {
+      toast.error('Please upload a valid XML or Excel file (.xml, .xlsx, .xls).');
       return;
     }
 
@@ -133,7 +135,21 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       toast.success(`File "${newFile.name}" uploaded successfully!`);
     } catch (error) {
       console.error('Error uploading file:', error);
-      toast.error(error.response?.data?.error || 'Failed to upload file. Please try again.');
+      let errorMessage = 'Failed to upload file. Please try again.';
+      
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
+      
+      setSelectedFile(null);
+      setSelectedFileData(null);
+      setFieldOptions([]);
+      setShowChart(false);
+      setIs3DMode(false);
     }
   };
 
@@ -264,6 +280,108 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
     return { allFields };
   };
 
+  const parseExcelData = (excelData) => {
+    try {
+      // Validate input
+      if (!excelData || typeof excelData !== 'string') {
+        throw new Error('Invalid Excel data: Expected a base64 string');
+      }
+
+      // Read the Excel file directly from base64
+      const workbook = XLSX.read(excelData, { type: 'base64' });
+      
+      // Log workbook info for debugging
+      console.log('Workbook sheets:', workbook.SheetNames);
+      
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) {
+        throw new Error('No sheets found in Excel file');
+      }
+      
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Log worksheet info for debugging
+      console.log('Worksheet range:', worksheet['!ref']);
+      
+      // Parse with raw values to preserve numbers
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+        defval: null,
+        blankrows: false,
+        raw: true
+      });
+
+      console.log('Parsed raw JSON data from Excel:', jsonData);
+
+      if (jsonData.length === 0) {
+        throw new Error('No data found in Excel file');
+      }
+
+      // Get headers from first row
+      const headers = jsonData[0];
+      if (!headers || headers.length === 0) {
+        throw new Error('No headers found in Excel file');
+      }
+
+      // Convert data to objects using headers and handle numeric conversion
+      const items = jsonData.slice(1).map((row, rowIndex) => {
+        const item = {};
+        headers.forEach((header, colIndex) => {
+          if (header) { // Only add non-null headers
+            const lowerCaseHeader = header.toLowerCase(); // Convert header to lowercase
+            let value = row[colIndex];
+
+            // If the value is null, undefined, or an empty string, treat it as 0.
+            if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+              item[lowerCaseHeader] = 0;
+            } else if (typeof value === 'string' && !isNaN(value)) {
+              // If it's a string that can be converted to a number, convert it.
+              item[lowerCaseHeader] = Number(value);
+            } else if (typeof value === 'number') {
+              // If it's already a number (from raw: true), keep it as is.
+              item[lowerCaseHeader] = value;
+            } else {
+              // For other types (e.g., non-numeric strings like 'State'), keep as is.
+              item[lowerCaseHeader] = value;
+            }
+          }
+        });
+        console.log(`Processed item ${rowIndex}:`, item);
+        return item;
+      });
+
+      // Filter out entirely empty rows (where all values are 0 or blank after initial processing)
+      const validItems = items.filter(item => {
+        const hasValues = Object.values(item).some(value => value !== 0 && value !== null && value !== undefined && value !== '');
+        return hasValues;
+      });
+
+      if (validItems.length === 0) {
+        throw new Error('No valid data rows found in Excel file');
+      }
+      
+      // Convert headers to field options compatible with react-select
+      const fieldOptions = headers
+        .filter(Boolean)
+        .map(header => ({
+          value: header,
+          label: formatFieldName(header)
+        }));
+
+      // Log the final processed data
+      console.log('Processed items:', validItems);
+      console.log('Field options:', fieldOptions);
+
+      return {
+        items: validItems,
+        allFields: fieldOptions
+      };
+    } catch (error) {
+      console.error('Error parsing Excel data:', error);
+      throw new Error('Failed to parse Excel file: ' + error.message);
+    }
+  };
+
   const handleFileSelect = async (file) => {
     try {
       console.log('Attempting to select file:', file.name, 'with gridfsId:', file.gridfsId);
@@ -280,6 +398,11 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
 
       console.log('Selecting file:', file.name);
       setSelectedFile(file);
+      setSelectedFileData(null);
+      setSelectedXAxis(null);
+      setSelectedYAxes([]);
+      setShowChart(false);
+
       const processResponse = await api.userFiles.getContent(file.gridfsId);
       console.log('File content response:', processResponse.data);
 
@@ -287,14 +410,54 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
         throw new Error('Invalid data received from server: Missing "data" property');
       }
 
-      const { allFields } = analyzeFields(processResponse.data.data);
-      setFieldOptions(allFields);
+      let items = [];
+      let allFields = [];
 
-      let items = findItemsArray(processResponse.data.data);
-      if (items.length === 0 || items.every((item) => !item || Object.keys(item).length === 0)) {
-        items = getFallbackData();
-        const { allFields } = analyzeFields({ items });
+      if (processResponse.data.fileType === 'excel') {
+        try {
+          // Parse Excel data
+          const { items: excelItems, allFields: excelFields } = parseExcelData(processResponse.data.data);
+          console.log('Parsed Excel items:', excelItems);
+          console.log('Parsed Excel fields:', excelFields);
+          items = excelItems;
+          allFields = excelFields;
+          setFieldOptions(allFields);
+        } catch (excelError) {
+          console.error('Excel parsing error:', excelError);
+          toast.error(excelError.message || 'Failed to parse Excel file');
+          setSelectedFileData(null);
+          setFieldOptions([]);
+          setSelectedXAxis(null);
+          setSelectedYAxes([]);
+          setShowChart(false);
+          throw excelError;
+        }
+      } else {
+        // For XML files, process as before
+        const { allFields: xmlFields } = analyzeFields(processResponse.data.data);
+        console.log('Parsed XML fields:', xmlFields);
+        allFields = xmlFields;
         setFieldOptions(allFields);
+        items = findItemsArray(processResponse.data.data);
+        console.log('Parsed XML items:', items);
+      }
+
+      if (!items || items.length === 0 || items.every((item) => !item || Object.keys(item).length === 0)) {
+        console.warn(`No valid data found in file "${file.name}". Attempting fallback data.`);
+        items = getFallbackData();
+        if (!items || items.length === 0) {
+          toast.error(`No data found in file "${file.name}" and no fallback data available.`);
+          setSelectedFileData(null);
+          setFieldOptions([]);
+          setSelectedXAxis(null);
+          setSelectedYAxes([]);
+          setSelectedChart('bar');
+          setShowChart(false);
+          setIs3DMode(false);
+          return;
+        }
+        const { allFields: fallbackFields } = analyzeFields({ items });
+        setFieldOptions(fallbackFields);
         setSelectedFileData(items);
         setSelectedXAxis(null);
         setSelectedYAxes([]);
@@ -318,7 +481,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
       if (error.response?.status === 401) {
         handleUnauthorized();
       } else {
-        toast.error(error.response?.data?.message || 'Failed to load file data');
+        toast.error(error.message || error.response?.data?.message || 'Failed to load file data');
       }
       setSelectedFile(null);
       setSelectedFileData(null);
@@ -549,7 +712,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                 </svg>
               </div>
               <h3 className="mt-4 text-xl font-semibold text-gray-900">
-                Drop your XML file here, or{' '}
+                Drop your XML or Excel file here, or{' '}
                 <label className="inline-block">
                   <span className="text-indigo-600 hover:text-indigo-500 cursor-pointer transition-colors duration-200 border-b-2 border-indigo-600 hover:border-indigo-500">
                     browse
@@ -557,13 +720,13 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                   <input
                     type="file"
                     className="hidden"
-                    accept=".xml"
+                    accept=".xml,.xlsx,.xls"
                     onChange={(e) => handleFileUpload(e.target.files[0])}
                     disabled={isLoading || isFetchingFiles}
                   />
                 </label>
               </h3>
-              <p className="mt-2 text-sm text-gray-500">XML files only, up to 10MB</p>
+              <p className="mt-2 text-sm text-gray-500">XML or Excel files only, up to 10MB</p>
             </div>
           </div>
         </div>
@@ -613,7 +776,9 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                             ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700'
                             : 'text-indigo-600 hover:bg-indigo-50 border border-indigo-600'
                         } ${!file.gridfsId ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        disabled={isLoading || isFetchingFiles || !file.gridfsId}
+                        disabled={isLoading || isFetchingFiles
+
+ || !file.gridfsId}
                       >
                         {selectedFile?.id === file.id ? 'Selected' : 'Select'}
                       </button>
@@ -625,7 +790,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
           </div>
         ) : (
           <div className="mb-8 text-center text-gray-500">
-            <p>No files uploaded yet. Upload an XML file to get started!</p>
+            <p>No files uploaded yet. Upload an XML or Excel file to get started!</p>
           </div>
         )}
         {selectedFile && selectedFileData && (
@@ -718,12 +883,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                                   strokeWidth={2}
                                   d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"
                                 />
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"
-                                />
+                                
                               </svg>
                             )}
                             {type === 'scatter' && (
@@ -991,7 +1151,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                           ':hover': { color: '#4F46E5' },
                           padding: '8px',
                         }),
-                      indicatorSeparator: (base) => ({ ...base, backgroundColor: '#E5E7EB' }),
+                        indicatorSeparator: (base) => ({ ...base, backgroundColor: '#E5E7EB' }),
                       }}
                     />
                   </div>

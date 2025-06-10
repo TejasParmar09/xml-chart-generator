@@ -26,6 +26,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
   // Helper function to get the last part of a field path (flattened name)
   const getFlattenedFieldName = (path) => {
     if (!path) return null;
+    // If path contains a dot, split and take the last part. Otherwise, use the path directly.
     const parts = path.split('.');
     return parts[parts.length - 1].toLowerCase();
   };
@@ -40,16 +41,23 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
   };
 
   const prepareChartData = () => {
-    if (!selectedFileData || !selectedXAxis || !selectedYAxes || selectedYAxes.length === 0) {
-      console.error('Missing required data:', { selectedFileData, selectedXAxis, selectedYAxes });
-      toast.error('Missing required data to generate chart.');
+    // Ensure selectedFileData is an array and selectedYAxes is an array
+    const fileData = selectedFileData || [];
+    const yAxes = selectedYAxes || [];
+
+    console.log('prepareChartData - fileData:', fileData);
+    console.log('prepareChartData - yAxes:', yAxes);
+
+    if (fileData.length === 0 || !selectedXAxis || yAxes.length === 0) {
+      console.error('Missing required data:', { selectedFileData: fileData, selectedXAxis, selectedYAxes: yAxes });
+      toast.error('Missing required data to generate chart. Please ensure a file is loaded and axes are selected.');
       return null;
     }
 
     try {
       const xField = selectedXAxis.value;
       const xFieldFlattened = getFlattenedFieldName(xField);
-      const yFields = selectedYAxes.map((yAxis) => yAxis.value);
+      const yFields = yAxes.map((yAxis) => yAxis.value);
       const yFieldsFlattened = yFields.map(getFlattenedFieldName);
 
       if (!xFieldFlattened || yFieldsFlattened.some((field) => !field)) {
@@ -58,7 +66,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
         return null;
       }
 
-      const labels = selectedFileData.map((item, index) => {
+      const labels = fileData.map((item, index) => {
         const value = item[xFieldFlattened] ?? `Item ${index + 1}`;
         return value.toString();
       });
@@ -86,7 +94,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       if (selectedChart === 'waterfall') {
         const yFieldFlattened = yFieldsFlattened[0];
         let cumulative = 0;
-        const data = selectedFileData.map((item, itemIndex) => {
+        const data = fileData.map((item, itemIndex) => {
           let value = item[yFieldFlattened] ?? null;
           if (value == null || isNaN(value)) {
             console.warn(`Invalid Y value at item ${itemIndex} for field ${yFields[0]}:`, value);
@@ -99,7 +107,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
         });
 
         datasets.push({
-          label: selectedYAxes[0].label,
+          label: yAxes[0].label,
           data: data.map(d => d.value),
           base: data.map(d => d.base),
           backgroundColor: (ctx) => {
@@ -117,18 +125,18 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       } else if (selectedChart === 'area') {
         datasets = yFields.map((yField, index) => {
           const yFieldFlattened = yFieldsFlattened[index];
-          const data = selectedFileData.map((item, itemIndex) => {
+          const data = fileData.map((item, itemIndex) => {
             let value = item[yFieldFlattened] ?? null;
             if (value == null || isNaN(value)) {
               console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
-              return null;
+              return 0; // Treat invalid Y values as 0 to ensure chart displays something
             }
             return Number(value);
           });
 
           const colorIndex = index % gradientColorPairs.length;
           return {
-            label: selectedYAxes[index].label,
+            label: yAxes[index].label,
             data,
             backgroundColor: (ctx) => {
               const chart = ctx.chart;
@@ -144,18 +152,18 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       } else if (selectedChart === 'stackedbar') {
         datasets = yFields.map((yField, index) => {
           const yFieldFlattened = yFieldsFlattened[index];
-          const data = selectedFileData.map((item, itemIndex) => {
+          const data = fileData.map((item, itemIndex) => {
             let value = item[yFieldFlattened] ?? null;
             if (value == null || isNaN(value)) {
               console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
-              return null;
+              return 0; // Treat invalid Y values as 0 to ensure chart displays something
             }
             return Number(value);
           });
 
           const colorIndex = index % gradientColorPairs.length;
           return {
-            label: selectedYAxes[index].label,
+            label: yAxes[index].label,
             data,
             backgroundColor: (ctx) => {
               const chart = ctx.chart;
@@ -170,7 +178,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       } else if (selectedChart === 'radar') {
         datasets = yFields.map((yField, index) => {
           const yFieldFlattened = yFieldsFlattened[index];
-          const data = selectedFileData.map((item, itemIndex) => {
+          const data = fileData.map((item, itemIndex) => {
             let value = item[yFieldFlattened] ?? null;
             if (value == null || isNaN(value)) {
               console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
@@ -181,7 +189,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
 
           const colorIndex = index % pieColors.length;
           return {
-            label: selectedYAxes[index].label,
+            label: yAxes[index].label,
             data,
             backgroundColor: pieColors[colorIndex] + '80',
             borderColor: pieColors[colorIndex],
@@ -192,7 +200,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       } else if (selectedChart === 'scatter') {
         datasets = yFields.map((yField, index) => {
           const yFieldFlattened = yFieldsFlattened[index];
-          const data = selectedFileData.map((item, itemIndex) => {
+          const data = fileData.map((item, itemIndex) => {
             let xValue = item[xFieldFlattened] ?? null;
             let yValue = item[yFieldFlattened] ?? null;
             if (xValue == null || yValue == null || isNaN(xValue) || isNaN(yValue)) {
@@ -204,7 +212,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
 
           const colorIndex = index % scatterColors.length;
           return {
-            label: selectedYAxes[index].label,
+            label: yAxes[index].label,
             data,
             backgroundColor: scatterColors[colorIndex],
             borderColor: scatterColors[colorIndex],
@@ -217,11 +225,11 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       } else {
         datasets = yFields.map((yField, index) => {
           const yFieldFlattened = yFieldsFlattened[index];
-          const data = selectedFileData.map((item, itemIndex) => {
+          const data = fileData.map((item, itemIndex) => {
             let value = item[yFieldFlattened] ?? null;
             if (value == null || isNaN(value)) {
               console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
-              return null;
+              return 0; // Treat invalid Y values as 0 to ensure chart displays something
             }
             return Number(value);
           });
@@ -229,7 +237,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
           if (selectedChart === 'pie') {
             const backgroundColors = data.map((_, dataIndex) => pieColors[dataIndex % pieColors.length]);
             return {
-              label: selectedYAxes[index].label,
+              label: yAxes[index].label,
               data,
               backgroundColor: backgroundColors,
               borderColor: backgroundColors.map(color => color.replace('0.9', '1')),
@@ -239,7 +247,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
 
           const colorIndex = index % gradientColorPairs.length;
           return {
-            label: selectedYAxes[index].label,
+            label: yAxes[index].label,
             data,
             backgroundColor: (ctx) => {
               const chart = ctx.chart;
@@ -260,7 +268,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
       const hasValidData = datasets.some((dataset) => dataset.data.length > 0 && dataset.data.some((value) => value != null || (value && (value.x != null && value.y != null))));
       if (!hasValidData) {
         console.warn('No valid data points found:', datasets);
-        toast.error('No valid data to display. Please check your data.');
+        toast.error('No valid data points found for the selected fields. Please check your data, especially for missing or non-numeric values in Y-axis fields.');
         return null;
       }
 
@@ -287,7 +295,12 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
 
   const downloadJPG = () => {
     if (is3DMode && (selectedChart === 'bar' || selectedChart === 'stackedbar')) {
-      if (!rendererRef.current) return;
+      if (!rendererRef.current || !sceneRef.current || !cameraRef.current) {
+        toast.error('3D chart not fully initialized for JPG download.');
+        return;
+      }
+      // Ensure the scene is rendered before capturing the image
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
       const link = document.createElement('a');
       link.download = 'chart.jpg';
       link.href = rendererRef.current.domElement.toDataURL('image/jpeg', 1.0);
@@ -310,7 +323,12 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
 
   const downloadPDF = () => {
     if (is3DMode && (selectedChart === 'bar' || selectedChart === 'stackedbar')) {
-      if (!rendererRef.current) return;
+      if (!rendererRef.current || !sceneRef.current || !cameraRef.current) {
+        toast.error('3D chart not fully initialized for PDF download.');
+        return;
+      }
+      // Ensure the scene is rendered before capturing the image
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
       const imgData = rendererRef.current.domElement.toDataURL('image/jpeg', 1.0);
       const pdf = new jsPDF('p', 'mm', 'a4');
       const imgWidth = 190;
@@ -957,10 +975,11 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf8fafc); // Light gray background
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ 
+    const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: true,
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
