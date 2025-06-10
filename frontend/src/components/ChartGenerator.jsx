@@ -127,6 +127,7 @@ const ChartGenerator = ({ selectedChart, selectedXAxis, selectedYAxes, selectedF
           const yFieldFlattened = yFieldsFlattened[index];
           const data = fileData.map((item, itemIndex) => {
             let value = item[yFieldFlattened] ?? null;
+            console.log(`Debug: ChartGenerator - Processing item ${itemIndex}, field '${yFieldFlattened}', raw value:`, value, `(type: ${typeof value})`);
             if (value == null || isNaN(value)) {
               console.warn(`Invalid Y value at item ${itemIndex} for field ${yField}:`, value);
               return 0; // Treat invalid Y values as 0 to ensure chart displays something
