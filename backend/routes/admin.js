@@ -170,34 +170,23 @@ router.delete('/files/:fileId', adminAuth, async (req, res) => {
 
     if (file.gridfsId) {
       const gfs = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
-      // Delete from GridFS and then the document
-      try {
-        // Attempt to delete from GridFS, catching potential synchronous errors
-        try {
-          await new Promise((resolve) => {
-            gfs.delete(file.gridfsId, (err) => {
-              if (err) {
-                // Log any error during GridFS deletion but don't stop the process
-                console.warn(`Error deleting GridFS file with ID ${file.gridfsId}:`, err.message);
-              }
-              // Always resolve the promise so document deletion proceeds
-              resolve();
-            });
-          });
-        } catch (gridFsErr) {
-          // Catch synchronous errors from gfs.delete (like MongoRuntimeError)
-          console.warn(`Synchronous error during GridFS deletion for ID ${file.gridfsId}:`, gridFsErr.message);
-        }
+      // Convert gridfsId to ObjectId
+      const gridFsObjectId = new mongoose.Types.ObjectId(file.gridfsId);
+      console.log('Attempting to delete GridFS file with ObjectId:', gridFsObjectId);
 
-        // After attempting GridFS deletion (regardless of success/failure), delete the document
-        await File.findByIdAndDelete(fileId); // Use findByIdAndDelete directly
-        console.log(`File document deleted for ID: ${fileId}`);
-        res.status(200).json({ message: 'File deleted successfully' });
-      } catch (err) {
-        console.error(`Error during file deletion process for ID ${fileId} (admin):`, err);
-        // If document deletion fails or other unexpected error occurs
-        res.status(500).json({ message: 'Failed to delete file.', details: err.message });
+      try {
+        await gfs.delete(gridFsObjectId); // This is the line that might throw synchronously
+        console.log(`GridFS file deleted successfully for ID: ${file.gridfsId}`);
+      } catch (gridFsErr) {
+        // Catch any errors from gfs.delete (e.g., MongoRuntimeError if file not found)
+        console.warn(`Error deleting GridFS file with ID ${file.gridfsId}:`, gridFsErr); // Log entire error object
+        // Continue with document deletion even if GridFS deletion failed
       }
+
+      // After attempting GridFS deletion (regardless of success/failure), delete the document
+      await File.findByIdAndDelete(fileId); // Use findByIdAndDelete directly
+      console.log(`File document deleted for ID: ${fileId}`);
+      res.status(200).json({ message: 'File deleted successfully' });
     } else {
       console.warn(`File ${fileId} has no gridfsId. Deleting document only.`);
       await File.findByIdAndDelete(fileId); // Use findByIdAndDelete directly

@@ -1,8 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const cors = require('cors');
+const path = require('path');
+const { GridFSBucket } = require('mongodb');
 const authRoutes = require('./routes/auth');
 const fileRoutes = require('./routes/files');
 const adminRoutes = require('./routes/admin');
@@ -36,20 +39,34 @@ app.use(session({
   }
 }));
 
-// MongoDB connection and cleanup
-mongoose.connect('mongodb://localhost:27017/chart-generator', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-  .then(async () => {
+// --- Global Error Handlers --- //
+// Catch unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Optionally, log to a file or send to an error tracking service
+  // process.exit(1); // Exit with a failure code if critical
+});
+
+// Catch uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Optionally, log to a file or send to an error tracking service
+  // process.exit(1); // Exit with a failure code if critical
+});
+
+// Connect to MongoDB
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
     console.log('Connected to MongoDB');
-    const { GridFSBucket } = require('mongodb');
     try {
-      global.bucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
+      global.bucket = new GridFSBucket(conn.connection.db, { bucketName: 'uploads' });
       console.log('GridFSBucket initialized successfully');
     } catch (err) {
-      console.error('Failed to initialize GridFSBucket:', err);
-      process.exit(1);
+      console.error('Error initializing GridFSBucket:', err);
     }
 
     // Clean up invalid files
@@ -66,11 +83,13 @@ mongoose.connect('mongodb://localhost:27017/chart-generator', {
     } catch (err) {
       console.error('Error during database cleanup:', err);
     }
-  })
-  .catch(err => {
+  } catch (err) {
     console.error('MongoDB connection error:', err);
     process.exit(1);
-  });
+  }
+};
+
+connectDB();
 
 // Routes
 app.use('/api/auth', authRoutes);

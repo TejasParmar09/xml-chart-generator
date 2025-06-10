@@ -564,13 +564,6 @@ const FileManagement = ({ files, loading, onFileDeleteSuccess, selectedUser }) =
                   </p>
                 </div>
                 <div className="flex space-x-3">
-                  <Link
-                    to={`/admin/files/${file.id}`}
-                    state={{ gridfsId: file.gridfsId }} // Pass gridfsId in state
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-all duration-200 shadow-sm font-medium"
-                  >
-                    View
-                  </Link>
                   <button
                     onClick={() => handleDelete(file.id)}
                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-all duration-200 shadow-sm font-medium"
