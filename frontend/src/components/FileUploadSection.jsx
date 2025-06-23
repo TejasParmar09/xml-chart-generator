@@ -1007,7 +1007,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                     className="text-sm"
                     isDisabled={isLoading || isFetchingFiles}
                     getOptionValue={(option) => option.value}
-                      styles={{
+                     styles={{
                         menu: (provided) => ({
                           ...provided,
                           zIndex: 999,
@@ -1020,7 +1020,7 @@ const FileUploadSection = ({ onFileUpload, isLoading }) => {
                           marginTop: '4px',
                         }),
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                        container: (base) => ({ ...base, zIndex: 50 }),
+                        container: (base) => ({ ...base, zIndex: 40 }),
                         control: (base, state) => ({
                           ...base,
                           minHeight: '42px',

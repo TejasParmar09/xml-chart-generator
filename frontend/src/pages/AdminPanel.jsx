@@ -624,7 +624,7 @@ const ProfileManagement = ({ profile, onUpdate }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-10">
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-10 ">
       <div className="max-w-lg w-full bg-white rounded-2xl shadow-xl p-8">
         <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Admin Profile</h2>
         {isEditing ? (
